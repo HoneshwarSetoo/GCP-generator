@@ -1,29 +1,107 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useGCPPoints } from './hooks/useGCPPoints';
 import { GCPMap } from './components/GCPMap';
 import { GCPList } from './components/GCPList';
-import { ImagePicker } from './components/ImagePicker';
+import { InteractiveImageOverlay } from './components/InteractiveImageOverlay';
 import { Button } from '@/features/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/features/ui/card';
-import { Send, Loader2, Upload, X } from 'lucide-react';
+import { Send, Loader2, Upload, X, MapPin, Move, Lock, Unlock } from 'lucide-react';
+import { GroundOverlay } from '@react-google-maps/api';
 
 export function GCPPointsContent() {
   const { 
     gcps, 
     isLoading, 
     imageUrl, 
-    pendingImageCoords, 
-    pendingMapCoords, 
     promptMessage,
     setPromptMessage,
     handleImageUpload, 
-    handleImageClick, 
-    handleMapClick, 
+    handleAddPoint, 
     handleRemoveGcp, 
     handleSubmit 
   } = useGCPPoints();
+
+  const [opacity, setOpacity] = useState(0.5);
+  const [mode, setMode] = useState<'align' | 'point'>('align');
+  const [isLocked, setIsLocked] = useState(false);
+  const [imageBounds, setImageBounds] = useState<google.maps.LatLngBoundsLiteral | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  
+  const imageRef = useRef<HTMLImageElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const projectionRef = useRef<google.maps.MapCanvasProjection | null>(null);
+
+  const handleToggleLock = useCallback(() => {
+    if (isLocked) {
+      setIsLocked(false);
+      setImageBounds(null);
+      return;
+    }
+
+    const proj = projectionRef.current;
+    const img = imageRef.current;
+    const mapDiv = mapContainerRef.current;
+
+    if (!proj || !img || !mapDiv) {
+      setPromptMessage('Map projection or image not ready.');
+      return;
+    }
+
+    const imgRect = img.getBoundingClientRect();
+    const mapRect = mapDiv.getBoundingClientRect();
+
+    const topLeftPixel = { x: imgRect.left - mapRect.left, y: imgRect.top - mapRect.top };
+    const bottomRightPixel = { x: imgRect.right - mapRect.left, y: imgRect.bottom - mapRect.top };
+
+    const sw = proj.fromContainerPixelToLatLng({ x: topLeftPixel.x, y: bottomRightPixel.y });
+    const ne = proj.fromContainerPixelToLatLng({ x: bottomRightPixel.x, y: topLeftPixel.y });
+
+    if (!sw || !ne) {
+      setPromptMessage('Failed to calculate geographic bounds');
+      return;
+    }
+
+    setImageBounds({
+      north: ne.lat(),
+      south: sw.lat(),
+      east: ne.lng(),
+      west: sw.lng()
+    });
+    
+    setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    setIsLocked(true);
+    setMode('point'); // Auto-switch to point mode when locked
+  }, [isLocked, setPromptMessage]);
+
+  const onMapClick = useCallback((lat: number, lng: number, altitude?: number | null) => {
+    if (mode !== 'point') return;
+    
+    if (!isLocked || !imageBounds || !imageDimensions) {
+      setPromptMessage('Please lock the image to the map first before adding points.');
+      return;
+    }
+
+    // Check if the click is within the geographic bounds of the image
+    if (
+      lat > imageBounds.north || 
+      lat < imageBounds.south || 
+      lng > imageBounds.east || 
+      lng < imageBounds.west
+    ) {
+      setPromptMessage('Please click within the overlaid image to add a point.');
+      return;
+    }
+
+    const fractionX = (lng - imageBounds.west) / (imageBounds.east - imageBounds.west);
+    const fractionY = (imageBounds.north - lat) / (imageBounds.north - imageBounds.south);
+
+    const pixelX = fractionX * imageDimensions.width;
+    const pixelY = fractionY * imageDimensions.height;
+
+    handleAddPoint(lat, lng, pixelX, pixelY, altitude);
+  }, [mode, isLocked, imageBounds, imageDimensions, handleAddPoint, setPromptMessage]);
 
   return (
     <div className="space-y-6 relative">
@@ -43,7 +121,7 @@ export function GCPPointsContent() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">GCP Points Selection</h1>
         <p className="text-muted-foreground">
-          Upload an image, then click a point on the image and the corresponding point on the map to create a Ground Control Point.
+          Upload an image, align it over the map, lock it, and then add GCP points.
         </p>
       </div>
 
@@ -63,42 +141,95 @@ export function GCPPointsContent() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Image Picker</CardTitle>
-                <CardDescription>
-                  Click on the uploaded image to select the source pixel.
-                  {pendingImageCoords && !pendingMapCoords && <span className="ml-2 text-yellow-600 font-medium">Now click the map.</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ImagePicker
-                  imageUrl={imageUrl}
-                  gcps={gcps}
-                  pendingImageCoords={pendingImageCoords}
-                  onImageClick={handleImageClick}
-                />
-              </CardContent>
-            </Card>
+          <Card className="shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                <div>
+                  <CardTitle>Map Overlay Alignment</CardTitle>
+                  <CardDescription>
+                    {isLocked 
+                      ? 'Image is locked to the map. Zoom freely to plot accurate points.' 
+                      : 'Drag and scale the image to align it with the map below, then click Lock.'}
+                  </CardDescription>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Opacity</span>
+                    <input 
+                      type="range" 
+                      min="0.1" max="1" step="0.05" 
+                      value={opacity} 
+                      onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                      className="w-24 accent-primary"
+                    />
+                  </div>
+                  
+                  <div className="h-6 w-px bg-border mx-1"></div>
+                  
+                  <div className="flex bg-background rounded-md shadow-sm border border-border p-0.5">
+                    <button
+                      onClick={() => { setMode('align'); setIsLocked(false); }}
+                      disabled={isLocked}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
+                        mode === 'align' && !isLocked ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground disabled:opacity-50'
+                      }`}
+                    >
+                      <Move size={14} /> Align
+                    </button>
+                    <button
+                      onClick={() => setMode('point')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
+                        mode === 'point' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <MapPin size={14} /> Add Point
+                    </button>
+                  </div>
 
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Map View</CardTitle>
-                <CardDescription>
-                  Click on the map to select the geographic coordinates.
-                  {!pendingImageCoords && pendingMapCoords && <span className="ml-2 text-yellow-600 font-medium">Now click the image.</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+                  <div className="h-6 w-px bg-border mx-1"></div>
+
+                  <button
+                    onClick={handleToggleLock}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md shadow-sm border transition-colors ${
+                      isLocked 
+                        ? 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200' 
+                        : 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
+                    }`}
+                  >
+                    {isLocked ? <Unlock size={16} /> : <Lock size={16} />}
+                    {isLocked ? 'Unlock Image' : 'Lock to Map'}
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 border-t">
+              <div ref={mapContainerRef} className="w-full relative">
                 <GCPMap 
                   gcps={gcps} 
-                  pendingMapCoords={pendingMapCoords}
-                  onMapClick={handleMapClick} 
-                />
-              </CardContent>
-            </Card>
-          </div>
+                  onMapClick={onMapClick} 
+                  onProjectionChange={(proj) => { projectionRef.current = proj; }}
+                >
+                  {!isLocked && (
+                    <InteractiveImageOverlay 
+                      ref={imageRef}
+                      imageUrl={imageUrl} 
+                      opacity={opacity} 
+                      isInteractive={mode === 'align'} 
+                      gcps={gcps}
+                    />
+                  )}
+                  {isLocked && imageBounds && (
+                    <GroundOverlay
+                      url={imageUrl}
+                      bounds={imageBounds}
+                      opacity={opacity}
+                    />
+                  )}
+                </GCPMap>
+              </div>
+            </CardContent>
+          </Card>
 
           <Card className="shadow-sm">
             <CardHeader>

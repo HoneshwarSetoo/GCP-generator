@@ -1,22 +1,24 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, Autocomplete, type GoogleMapProps } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete, OverlayView, type GoogleMapProps } from '@react-google-maps/api';
 import { GCP } from '../types';
 import { useGCPMap } from '../hooks/useGCPMap';
 import { GOOGLE_MAPS_CONFIG } from '@/lib/googleMapsConfig';
 
 const containerStyle = {
   width: '100%',
-  height: '500px',
+  height: '700px',
+  minHeight: '60vh',
   borderRadius: '0.5rem',
 };
 
 interface GCPMapProps {
   gcps: GCP[];
-  pendingMapCoords: { lat: number; lng: number; altitude?: number | null } | null;
   onMapClick: (lat: number, lng: number, altitude?: number | null) => void;
+  onProjectionChange?: (projection: google.maps.MapCanvasProjection | null) => void;
+  children?: React.ReactNode;
 }
 
-export function GCPMap({ gcps, pendingMapCoords, onMapClick }: GCPMapProps) {
+export function GCPMap({ gcps, onMapClick, onProjectionChange, children }: GCPMapProps) {
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_CONFIG);
   const { handleMapClick } = useGCPMap({ onMapClick });
 
@@ -82,6 +84,23 @@ export function GCPMap({ gcps, pendingMapCoords, onMapClick }: GCPMapProps) {
           fullscreenControl: true,
         }}
       >
+        <OverlayView
+          position={center}
+          mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+          onLoad={(overlay) => {
+            if (onProjectionChange) {
+              onProjectionChange(overlay.getProjection());
+            }
+          }}
+          onUnmount={() => {
+            if (onProjectionChange) {
+              onProjectionChange(null);
+            }
+          }}
+        >
+          <div style={{ display: 'none' }} />
+        </OverlayView>
+
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[80%] max-w-sm z-10">
           <Autocomplete onLoad={onLoadAutocomplete} onPlaceChanged={onPlaceChanged}>
             <input
@@ -103,14 +122,7 @@ export function GCPMap({ gcps, pendingMapCoords, onMapClick }: GCPMapProps) {
           />
         ))}
 
-        {pendingMapCoords && (
-          <Marker
-            position={{ lat: pendingMapCoords.lat, lng: pendingMapCoords.lng }}
-            icon={{
-              url: 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png'
-            }}
-          />
-        )}
+        {children}
       </GoogleMap>
     </div>
   );
