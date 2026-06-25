@@ -131,13 +131,24 @@ export function GCPPointsContent() {
     setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
     savedRenderedWidthRef.current = imgRect.width / imageTransform.scale;
     
-    // Automatically generate 4 GCP points for the corners
-    setMultiplePoints([
-      { pxcel_x: 0, pxcel_y: 0, geo_lat: ne.lat(), geo_lon: sw.lng() }, // Top-Left
-      { pxcel_x: img.naturalWidth, pxcel_y: 0, geo_lat: ne.lat(), geo_lon: ne.lng() }, // Top-Right
-      { pxcel_x: img.naturalWidth, pxcel_y: img.naturalHeight, geo_lat: sw.lat(), geo_lon: ne.lng() }, // Bottom-Right
-      { pxcel_x: 0, pxcel_y: img.naturalHeight, geo_lat: sw.lat(), geo_lon: sw.lng() }, // Bottom-Left
-    ]);
+    // Automatically generate 50 GCP points (10 columns x 5 rows grid)
+    const points: Omit<GCP, 'id' | 'label' | 'status'>[] = [];
+    const cols = 10;
+    const rows = 5;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const fractionX = col / (cols - 1);
+        const fractionY = row / (rows - 1);
+        
+        points.push({
+          pxcel_x: Math.round(fractionX * img.naturalWidth),
+          pxcel_y: Math.round(fractionY * img.naturalHeight),
+          geo_lat: ne.lat() - fractionY * (ne.lat() - sw.lat()),
+          geo_lon: sw.lng() + fractionX * (ne.lng() - sw.lng()),
+        });
+      }
+    }
+    setMultiplePoints(points);
 
     setIsLocked(true);
     setMode('point'); // Auto-switch to point mode when locked

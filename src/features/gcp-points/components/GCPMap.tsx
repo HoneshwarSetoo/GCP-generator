@@ -132,10 +132,18 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
                 }
               }
             }}
-            label={{
+            icon={typeof google !== 'undefined' ? {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: '#ef4444',
+              fillOpacity: 1,
+              strokeWeight: 1,
+              strokeColor: '#ffffff',
+              scale: 5,
+            } : undefined}
+            /* label={{
               text: gcp.label ?? `GCP-${gcp.id ?? '1'}`,
               className: 'bg-white px-1 py-0.5 rounded text-xs font-semibold shadow-sm mt-8',
-            }}
+            }} */
           />
         ))}
 
