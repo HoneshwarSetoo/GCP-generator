@@ -1,29 +1,41 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useGCPPoints } from './hooks/useGCPPoints';
-import { GCPMap } from './components/GCPMap';
-import { GCPList } from './components/GCPList';
-import { ImagePicker } from './components/ImagePicker';
-import { Button } from '@/features/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/features/ui/card';
-import { Send, Loader2, Upload, X } from 'lucide-react';
+import { useGCPMapState } from './hooks/useGCPMapState';
+import { useGCPMapInteractions } from './hooks/useGCPMapInteractions';
+import { X } from 'lucide-react';
+
+import { ImageUploadSection } from './components/ImageUploadSection';
+import { UploadedImagesSection } from './components/UploadedImagesSection';
+import { MapOverlayAlignment } from './components/MapOverlayAlignment';
+import { SelectedPointsSection } from './components/SelectedPointsSection';
 
 export function GCPPointsContent() {
   const { 
-    gcps, 
-    isLoading, 
-    imageUrl, 
-    pendingImageCoords, 
-    pendingMapCoords, 
-    promptMessage,
-    setPromptMessage,
-    handleImageUpload, 
-    handleImageClick, 
-    handleMapClick, 
-    handleRemoveGcp, 
-    handleSubmit 
+    gcps, setGcps, images, setImages, activeImageId, setActiveImageId,
+    isLoading, promptMessage, setPromptMessage, handleImageUpload, 
+    handleAddPoint, handleRemoveGcp, handleSubmit,
+    updateGCPPosition,
   } = useGCPPoints();
+
+  const {
+    opacity, setOpacity, mode, setMode, setMapInstance,
+    activeImage, isLocked, imageBounds, imageDimensions,
+    localTransform, handleTransformChange,
+  } = useGCPMapState(images, setImages, activeImageId);
+
+  const imageRef = useRef<HTMLImageElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const projectionRef = useRef<google.maps.MapCanvasProjection | null>(null);
+  const savedRenderedWidthRef = useRef<number | null>(null);
+
+  const interactions = useGCPMapInteractions({
+    images, setImages, gcps, setGcps, activeImage, activeImageId, setActiveImageId,
+    setMode, mode, isLocked, imageBounds, imageDimensions, setPromptMessage,
+    projectionRef, mapContainerRef, imageRef, savedRenderedWidthRef,
+    localTransform, handleTransformChange, handleAddPoint, updateGCPPosition
+  });
 
   return (
     <div className="space-y-6 relative">
@@ -43,92 +55,41 @@ export function GCPPointsContent() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">GCP Points Selection</h1>
         <p className="text-muted-foreground">
-          Upload an image, then click a point on the image and the corresponding point on the map to create a Ground Control Point.
+          Upload images, drop them onto the map, lock them, and select points.
         </p>
       </div>
 
-      {!imageUrl ? (
-        <Card className="shadow-sm border-dashed">
-          <CardContent className="flex flex-col items-center justify-center h-64 space-y-4">
-            <Upload className="h-12 w-12 text-muted-foreground" />
-            <div className="text-center">
-              <h3 className="font-semibold text-lg">Upload Map Image</h3>
-              <p className="text-sm text-muted-foreground mb-4">Select a PNG or JPG file to georeference</p>
-              <label className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md font-medium text-sm transition-colors">
-                Select File
-                <input type="file" className="hidden" accept="image/png, image/jpeg" onChange={handleImageUpload} />
-              </label>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
+      {images.length === 0 && (
+        <ImageUploadSection handleImageUpload={handleImageUpload} />
+      )}
+
+      {images.length > 0 && (
+        <UploadedImagesSection 
+          images={images} 
+          activeImageId={activeImageId} 
+          setActiveImageId={setActiveImageId}
+          activeImage={activeImage}
+          setMode={setMode}
+        />
+      )}
+
+      {images.length > 0 && (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Image Picker</CardTitle>
-                <CardDescription>
-                  Click on the uploaded image to select the source pixel.
-                  {pendingImageCoords && !pendingMapCoords && <span className="ml-2 text-yellow-600 font-medium">Now click the map.</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ImagePicker
-                  imageUrl={imageUrl}
-                  gcps={gcps}
-                  pendingImageCoords={pendingImageCoords}
-                  onImageClick={handleImageClick}
-                />
-              </CardContent>
-            </Card>
+          <MapOverlayAlignment 
+            images={images} gcps={gcps} activeImageId={activeImageId} activeImage={activeImage}
+            setActiveImageId={setActiveImageId} isLocked={isLocked} opacity={opacity} setOpacity={setOpacity}
+            mode={mode} setMode={setMode} handleSubmit={handleSubmit} mapContainerRef={mapContainerRef}
+            imageRef={imageRef} projectionRef={projectionRef} setMapInstance={setMapInstance}
+            onMapClick={interactions.onMapClick} handleMarkerDragEnd={interactions.handleMarkerDragEnd}
+            localTransform={localTransform} handleTransformChange={handleTransformChange}
+            handleRemoveFromMap={interactions.handleRemoveFromMap} handleToggleLock={interactions.handleToggleLock}
+            handleControlsPosChange={interactions.handleControlsPosChange} handleUnlockSpecificImage={interactions.handleUnlockSpecificImage}
+          />
 
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle>Map View</CardTitle>
-                <CardDescription>
-                  Click on the map to select the geographic coordinates.
-                  {!pendingImageCoords && pendingMapCoords && <span className="ml-2 text-yellow-600 font-medium">Now click the image.</span>}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <GCPMap 
-                  gcps={gcps} 
-                  pendingMapCoords={pendingMapCoords}
-                  onMapClick={handleMapClick} 
-                />
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Selected Points</CardTitle>
-              <CardDescription>
-                {gcps.length} point{gcps.length !== 1 ? 's' : ''} selected
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <GCPList gcps={gcps} onRemove={handleRemoveGcp} />
-              
-              <Button 
-                className="w-full sm:w-auto" 
-                onClick={handleSubmit} 
-                disabled={gcps.length === 0 || isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Send Points
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+          {/* <SelectedPointsSection 
+            gcps={gcps} activeImage={activeImage} handleRemoveGcp={handleRemoveGcp}
+            handleSubmit={handleSubmit} isLoading={isLoading}
+          /> */}
         </>
       )}
     </div>
