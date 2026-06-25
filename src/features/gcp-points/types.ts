@@ -10,6 +10,10 @@ export interface GCP {
   status?: 'mapped' | 'surveyed';
 }
 
-export interface GCPPayload {
-  points: GCP[];
-}
+/**
+ * The API accepts multipart/form-data with two fields:
+ *   - image  : the raw JPG/PNG File object
+ *   - points : JSON.stringify(GCP[])
+ * We use the native FormData type for the mutation payload.
+ */
+export type GCPFormPayload = FormData;

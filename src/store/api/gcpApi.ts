@@ -1,5 +1,19 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { GCPPayload } from '@/features/gcp-points/types';
+import type { GCPFormPayload } from '@/features/gcp-points/types';
+
+/**
+ * Converts a binary Response to a base64 data URL string.
+ * This keeps Redux state fully serializable (no Blob objects in state).
+ */
+async function tiffResponseToDataUrl(response: Response): Promise<string> {
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read TIFF response'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 export const gcpApi = createApi({
   reducerPath: 'gcpApi',
@@ -7,14 +21,22 @@ export const gcpApi = createApi({
     baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || '/api',
   }),
   endpoints: (builder) => ({
-    createGCPPoints: builder.mutation<{ success: boolean; message?: string }, GCPPayload>({
-      query: (payload) => ({
+    /**
+     * Sends multipart/form-data (image + GCP JSON) to the Next.js proxy,
+     * which forwards to the Python GDAL backend.
+     * Returns a base64 data URL string (serializable in Redux state).
+     */
+    createGeoTiff: builder.mutation<string, GCPFormPayload>({
+      query: (formData) => ({
         url: '/gcp-points',
         method: 'POST',
-        body: payload,
+        body: formData,
+        // Do NOT set Content-Type — browser sets the multipart boundary
+        responseHandler: tiffResponseToDataUrl,
       }),
     }),
   }),
 });
 
-export const { useCreateGCPPointsMutation } = gcpApi;
+export const { useCreateGeoTiffMutation } = gcpApi;
+

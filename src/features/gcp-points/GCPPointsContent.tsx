@@ -5,23 +5,29 @@ import { useGCPPoints } from './hooks/useGCPPoints';
 import { GCPMap } from './components/GCPMap';
 import { GCPList } from './components/GCPList';
 import { InteractiveImageOverlay } from './components/InteractiveImageOverlay';
+import { GeoTiffResult } from './components/GeoTiffResult';
 import { Button } from '@/features/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/features/ui/card';
-import { Send, Loader2, Upload, X, MapPin, Move, Lock, Unlock } from 'lucide-react';
+import { FileStack, Loader2, Upload, X, MapPin, Move, Lock, Unlock } from 'lucide-react';
+import { GCP } from './types';
 
 export function GCPPointsContent() {
-  const { 
-    gcps, 
-    isLoading, 
-    imageUrl, 
+  const {
+    gcps,
+    isLoading,
+    imageUrl,
     promptMessage,
     setPromptMessage,
-    handleImageUpload, 
+    handleImageUpload,
     handleAddPoint,
-    handleRemoveGcp, 
+    handleRemoveGcp,
     handleSubmit,
     setMultiplePoints,
     updateGCPPosition,
+    tiffDataUrl,
+    tiffFileName,
+    handleDownload,
+    handleReset,
   } = useGCPPoints();
 
   const [opacity, setOpacity] = useState(0.5);
@@ -331,26 +337,37 @@ export function GCPPointsContent() {
             </CardHeader>
             <CardContent className="space-y-4">
               <GCPList gcps={gcps} onRemove={handleRemoveGcp} />
-              
-              <Button 
-                className="w-full sm:w-auto" 
-                onClick={handleSubmit} 
+
+              <Button
+                className="w-full sm:w-auto"
+                onClick={handleSubmit}
                 disabled={gcps.length === 0 || isLoading}
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
+                    Generating GeoTIFF...
                   </>
                 ) : (
                   <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Send Points
+                    <FileStack className="mr-2 h-4 w-4" />
+                    Generate GeoTIFF
                   </>
                 )}
               </Button>
             </CardContent>
           </Card>
+
+          {tiffDataUrl && (
+            <GeoTiffResult
+              tiffDataUrl={tiffDataUrl}
+              tiffFileName={tiffFileName}
+              gcpCount={gcps.length}
+              sourceImageUrl={imageUrl}
+              onDownload={handleDownload}
+              onReset={handleReset}
+            />
+          )}
         </>
       )}
     </div>
