@@ -1,5 +1,5 @@
+import { GCPPayload } from '@/features/gcp-points/types';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { GCPFormPayload } from '@/features/gcp-points/types';
 
 /**
  * Converts a binary Response to a base64 data URL string.
@@ -26,7 +26,7 @@ export const gcpApi = createApi({
      * which forwards to the Python GDAL backend.
      * Returns a base64 data URL string (serializable in Redux state).
      */
-    createGeoTiff: builder.mutation<string, GCPFormPayload>({
+    createGeoTiff: builder.mutation<string, GCPPayload>({
       query: (formData) => ({
         url: '/gcp-points',
         method: 'POST',
