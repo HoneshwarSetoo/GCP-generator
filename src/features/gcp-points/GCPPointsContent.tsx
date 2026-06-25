@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useGCPPoints } from './hooks/useGCPPoints';
 import { GCPMap } from './components/GCPMap';
 import { GCPList } from './components/GCPList';
@@ -8,7 +8,6 @@ import { InteractiveImageOverlay } from './components/InteractiveImageOverlay';
 import { Button } from '@/features/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/features/ui/card';
 import { Send, Loader2, Upload, X, MapPin, Move, Lock, Unlock } from 'lucide-react';
-import { GroundOverlay } from '@react-google-maps/api';
 
 export function GCPPointsContent() {
   const { 
@@ -18,9 +17,11 @@ export function GCPPointsContent() {
     promptMessage,
     setPromptMessage,
     handleImageUpload, 
-    handleAddPoint, 
+    handleAddPoint,
     handleRemoveGcp, 
-    handleSubmit 
+    handleSubmit,
+    setMultiplePoints,
+    updateGCPPosition,
   } = useGCPPoints();
 
   const [opacity, setOpacity] = useState(0.5);
@@ -28,24 +29,81 @@ export function GCPPointsContent() {
   const [isLocked, setIsLocked] = useState(false);
   const [imageBounds, setImageBounds] = useState<google.maps.LatLngBoundsLiteral | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [imageTransform, setImageTransform] = useState({ x: 0, y: 0, scale: 1 });
   
   const imageRef = useRef<HTMLImageElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const projectionRef = useRef<google.maps.MapCanvasProjection | null>(null);
+  const savedRenderedWidthRef = useRef<number | null>(null);
+  
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const nativeOverlayRef = useRef<google.maps.GroundOverlay | null>(null);
+
+  // Manage the native GroundOverlay directly to avoid React wrapper bugs
+  useEffect(() => {
+    if (isLocked && imageBounds && mapInstance && imageUrl) {
+      const overlay = new google.maps.GroundOverlay(imageUrl, imageBounds, { opacity, clickable: false });
+      overlay.setMap(mapInstance);
+      nativeOverlayRef.current = overlay;
+
+      return () => {
+        overlay.setMap(null);
+        nativeOverlayRef.current = null;
+      };
+    }
+  }, [isLocked, imageBounds, imageUrl, mapInstance]);
+
+  useEffect(() => {
+    if (nativeOverlayRef.current) {
+      nativeOverlayRef.current.setOpacity(opacity);
+    }
+  }, [opacity]);
 
   const handleToggleLock = useCallback(() => {
-    if (isLocked) {
-      setIsLocked(false);
-      setImageBounds(null);
+    const proj = projectionRef.current;
+    const mapDiv = mapContainerRef.current;
+
+    if (!proj || !mapDiv) {
+      setPromptMessage('Map projection not ready.');
       return;
     }
 
-    const proj = projectionRef.current;
-    const img = imageRef.current;
-    const mapDiv = mapContainerRef.current;
+    if (isLocked) {
+      // UNLOCKING: Calculate new transform from bounds to seamlessly align
+      if (imageBounds && savedRenderedWidthRef.current) {
+        const swPixel = proj.fromLatLngToContainerPixel(new google.maps.LatLng(imageBounds.south, imageBounds.west));
+        const nePixel = proj.fromLatLngToContainerPixel(new google.maps.LatLng(imageBounds.north, imageBounds.east));
+        
+        if (swPixel && nePixel) {
+          const targetWidth = nePixel.x - swPixel.x;
+          const targetHeight = swPixel.y - nePixel.y;
+          
+          const targetScale = targetWidth / savedRenderedWidthRef.current;
+          
+          const targetCenterX = swPixel.x + targetWidth / 2;
+          const targetCenterY = nePixel.y + targetHeight / 2;
+          
+          const containerCenterX = mapDiv.clientWidth / 2;
+          const containerCenterY = mapDiv.clientHeight / 2;
+          
+          setImageTransform({ 
+            x: targetCenterX - containerCenterX, 
+            y: targetCenterY - containerCenterY, 
+            scale: targetScale 
+          });
+        }
+      }
 
-    if (!proj || !img || !mapDiv) {
-      setPromptMessage('Map projection or image not ready.');
+      setIsLocked(false);
+      setImageBounds(null);
+      setMultiplePoints([]);
+      return;
+    }
+
+    // LOCKING
+    const img = imageRef.current;
+    if (!img) {
+      setPromptMessage('Image not loaded.');
       return;
     }
 
@@ -55,8 +113,8 @@ export function GCPPointsContent() {
     const topLeftPixel = { x: imgRect.left - mapRect.left, y: imgRect.top - mapRect.top };
     const bottomRightPixel = { x: imgRect.right - mapRect.left, y: imgRect.bottom - mapRect.top };
 
-    const sw = proj.fromContainerPixelToLatLng({ x: topLeftPixel.x, y: bottomRightPixel.y });
-    const ne = proj.fromContainerPixelToLatLng({ x: bottomRightPixel.x, y: topLeftPixel.y });
+    const sw = proj.fromContainerPixelToLatLng(new google.maps.Point(topLeftPixel.x, bottomRightPixel.y));
+    const ne = proj.fromContainerPixelToLatLng(new google.maps.Point(bottomRightPixel.x, topLeftPixel.y));
 
     if (!sw || !ne) {
       setPromptMessage('Failed to calculate geographic bounds');
@@ -71,9 +129,19 @@ export function GCPPointsContent() {
     });
     
     setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+    savedRenderedWidthRef.current = imgRect.width / imageTransform.scale;
+    
+    // Automatically generate 4 GCP points for the corners
+    setMultiplePoints([
+      { pxcel_x: 0, pxcel_y: 0, geo_lat: ne.lat(), geo_lon: sw.lng() }, // Top-Left
+      { pxcel_x: img.naturalWidth, pxcel_y: 0, geo_lat: ne.lat(), geo_lon: ne.lng() }, // Top-Right
+      { pxcel_x: img.naturalWidth, pxcel_y: img.naturalHeight, geo_lat: sw.lat(), geo_lon: ne.lng() }, // Bottom-Right
+      { pxcel_x: 0, pxcel_y: img.naturalHeight, geo_lat: sw.lat(), geo_lon: sw.lng() }, // Bottom-Left
+    ]);
+
     setIsLocked(true);
     setMode('point'); // Auto-switch to point mode when locked
-  }, [isLocked, setPromptMessage]);
+  }, [isLocked, imageBounds, imageTransform.scale, setPromptMessage]);
 
   const onMapClick = useCallback((lat: number, lng: number, altitude?: number | null) => {
     if (mode !== 'point') return;
@@ -97,11 +165,26 @@ export function GCPPointsContent() {
     const fractionX = (lng - imageBounds.west) / (imageBounds.east - imageBounds.west);
     const fractionY = (imageBounds.north - lat) / (imageBounds.north - imageBounds.south);
 
-    const pixelX = fractionX * imageDimensions.width;
-    const pixelY = fractionY * imageDimensions.height;
+    const pixelX = Math.round(fractionX * imageDimensions.width);
+    const pixelY = Math.round(fractionY * imageDimensions.height);
 
     handleAddPoint(lat, lng, pixelX, pixelY, altitude);
   }, [mode, isLocked, imageBounds, imageDimensions, handleAddPoint, setPromptMessage]);
+
+  const handleMarkerDragEnd = useCallback((id: string, lat: number, lng: number) => {
+    let pixelX: number | undefined;
+    let pixelY: number | undefined;
+
+    if (isLocked && imageBounds && imageDimensions) {
+      const fractionX = (lng - imageBounds.west) / (imageBounds.east - imageBounds.west);
+      const fractionY = (imageBounds.north - lat) / (imageBounds.north - imageBounds.south);
+
+      pixelX = Math.round(fractionX * imageDimensions.width);
+      pixelY = Math.round(fractionY * imageDimensions.height);
+    }
+
+    updateGCPPosition(id, lat, lng, pixelX, pixelY);
+  }, [isLocked, imageBounds, imageDimensions, updateGCPPosition]);
 
   return (
     <div className="space-y-6 relative">
@@ -158,7 +241,7 @@ export function GCPPointsContent() {
                     <span className="text-xs font-medium text-muted-foreground">Opacity</span>
                     <input 
                       type="range" 
-                      min="0.1" max="1" step="0.05" 
+                      min="0" max="1" step="0.05" 
                       value={opacity} 
                       onChange={(e) => setOpacity(parseFloat(e.target.value))}
                       className="w-24 accent-primary"
@@ -209,6 +292,8 @@ export function GCPPointsContent() {
                   gcps={gcps} 
                   onMapClick={onMapClick} 
                   onProjectionChange={(proj) => { projectionRef.current = proj; }}
+                  onMapLoad={setMapInstance}
+                  onMarkerDragEnd={handleMarkerDragEnd}
                 >
                   {!isLocked && (
                     <InteractiveImageOverlay 
@@ -217,13 +302,8 @@ export function GCPPointsContent() {
                       opacity={opacity} 
                       isInteractive={mode === 'align'} 
                       gcps={gcps}
-                    />
-                  )}
-                  {isLocked && imageBounds && (
-                    <GroundOverlay
-                      url={imageUrl}
-                      bounds={imageBounds}
-                      opacity={opacity}
+                      transform={imageTransform}
+                      onTransformChange={setImageTransform}
                     />
                   )}
                 </GCPMap>

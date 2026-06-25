@@ -6,11 +6,12 @@ interface InteractiveImageOverlayProps {
   opacity: number;
   isInteractive: boolean;
   gcps: GCP[];
+  transform: { x: number; y: number; scale: number };
+  onTransformChange: (transform: { x: number; y: number; scale: number }) => void;
 }
 
 export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveImageOverlayProps>(
-  ({ imageUrl, opacity, isInteractive, gcps }, ref) => {
-    const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  ({ imageUrl, opacity, isInteractive, gcps, transform, onTransformChange }, ref) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragStartRef = useRef({ x: 0, y: 0, initialTx: 0, initialTy: 0 });
 
@@ -31,11 +32,11 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
         if (!isDragging || !isInteractive) return;
         const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
-        setTransform((prev) => ({
-          ...prev,
+        onTransformChange({
+          scale: transform.scale,
           x: dragStartRef.current.initialTx + dx,
           y: dragStartRef.current.initialTy + dy,
-        }));
+        });
       };
 
       const handleMouseUp = () => {
@@ -61,10 +62,10 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
       const delta = -e.deltaY * scaleSensitivity;
       const newScale = Math.max(0.1, Math.min(transform.scale * Math.exp(delta), 10));
       
-      setTransform((prev) => ({
-        ...prev,
+      onTransformChange({
+        ...transform,
         scale: newScale,
-      }));
+      });
     };
 
     return (

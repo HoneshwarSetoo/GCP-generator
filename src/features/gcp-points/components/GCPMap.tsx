@@ -15,20 +15,24 @@ interface GCPMapProps {
   gcps: GCP[];
   onMapClick: (lat: number, lng: number, altitude?: number | null) => void;
   onProjectionChange?: (projection: google.maps.MapCanvasProjection | null) => void;
+  onMapLoad?: (map: google.maps.Map | null) => void;
+  onMarkerDragEnd?: (id: string, lat: number, lng: number) => void;
   children?: React.ReactNode;
 }
 
-export function GCPMap({ gcps, onMapClick, onProjectionChange, children }: GCPMapProps) {
+export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMarkerDragEnd, children }: GCPMapProps) {
   const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_CONFIG);
   const { handleMapClick } = useGCPMap({ onMapClick });
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const markerRefs = useRef<{ [key: string]: google.maps.Marker }>({});
   const [center, setCenter] = useState({ lat: 18.52043, lng: 73.856744 });
 
   const onLoadMap = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-  }, []);
+    if (onMapLoad) onMapLoad(map);
+  }, [onMapLoad]);
 
   const onLoadAutocomplete = useCallback((autocomplete: google.maps.places.Autocomplete) => {
     autocompleteRef.current = autocomplete;
@@ -114,7 +118,20 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, children }: GCPMa
         {gcps.map((gcp) => (
           <Marker
             key={gcp.id}
+            onLoad={(marker) => {
+              if (gcp.id) markerRefs.current[gcp.id] = marker;
+            }}
             position={{ lat: gcp.geo_lat, lng: gcp.geo_lon }}
+            draggable={true}
+            onDragEnd={() => {
+              if (onMarkerDragEnd && gcp.id) {
+                const marker = markerRefs.current[gcp.id];
+                const pos = marker?.getPosition();
+                if (pos) {
+                  onMarkerDragEnd(gcp.id, pos.lat(), pos.lng());
+                }
+              }
+            }}
             label={{
               text: gcp.label ?? `GCP-${gcp.id ?? '1'}`,
               className: 'bg-white px-1 py-0.5 rounded text-xs font-semibold shadow-sm mt-8',

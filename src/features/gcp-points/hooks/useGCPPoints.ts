@@ -35,6 +35,19 @@ export function useGCPPoints() {
     toast.success('GCP point added');
   }, [gcps.length]);
 
+  const setMultiplePoints = useCallback((points: Omit<GCP, 'id' | 'label' | 'status'>[]) => {
+    const newGcps = points.map((p, i) => ({
+      ...p,
+      id: crypto.randomUUID(),
+      label: `GCP-${i + 1}`,
+      status: 'mapped' as const,
+    }));
+    setGcps(newGcps);
+    if (points.length > 0) {
+      toast.success(`${points.length} points automatically generated`);
+    }
+  }, []);
+
   useEffect(() => {
     if (promptMessage) {
       const timer = setTimeout(() => setPromptMessage(null), 5000);
@@ -44,6 +57,25 @@ export function useGCPPoints() {
 
   const handleRemoveGcp = useCallback((id: string) => {
     setGcps((prev) => prev.filter((gcp) => gcp.id !== id));
+    toast.success('GCP point removed');
+  }, []);
+
+  const updateGCPPosition = useCallback((id: string, lat: number, lng: number, pxcel_x?: number, pxcel_y?: number) => {
+    setGcps((prev) => 
+      prev.map((gcp) => {
+        if (gcp.id === id) {
+          toast.success(`Position updated for ${gcp.label}`);
+          return {
+            ...gcp,
+            geo_lat: lat,
+            geo_lon: lng,
+            ...(pxcel_x !== undefined ? { pxcel_x } : {}),
+            ...(pxcel_y !== undefined ? { pxcel_y } : {}),
+          };
+        }
+        return gcp;
+      })
+    );
   }, []);
 
   const handleSubmit = useCallback(async () => {
@@ -74,5 +106,7 @@ export function useGCPPoints() {
     handleAddPoint,
     handleRemoveGcp,
     handleSubmit,
+    setMultiplePoints,
+    updateGCPPosition,
   };
 }
