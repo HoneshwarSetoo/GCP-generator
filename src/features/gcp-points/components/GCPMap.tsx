@@ -85,7 +85,8 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
         options={{
           streetViewControl: false,
           mapTypeControl: true,
-          fullscreenControl: true,
+          fullscreenControl: false,
+          zoomControl: false,
         }}
       >
         <OverlayView

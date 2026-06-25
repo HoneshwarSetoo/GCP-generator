@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, forwardRef } from 'react';
 import { GCP } from '../types';
+import { DraggableImageControls } from './DraggableImageControls';
 
 interface InteractiveImageOverlayProps {
   imageUrl: string;
@@ -8,10 +9,14 @@ interface InteractiveImageOverlayProps {
   gcps: GCP[];
   transform: { x: number; y: number; scale: number };
   onTransformChange: (transform: { x: number; y: number; scale: number }) => void;
+  onRemove: () => void;
+  onLock: () => void;
+  controlsPos?: { edge: 'top' | 'bottom' | 'left' | 'right'; percent: number };
+  onControlsPosChange?: (pos: { edge: 'top' | 'bottom' | 'left' | 'right'; percent: number }) => void;
 }
 
 export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveImageOverlayProps>(
-  ({ imageUrl, opacity, isInteractive, gcps, transform, onTransformChange }, ref) => {
+  ({ imageUrl, opacity, isInteractive, gcps, transform, onTransformChange, onRemove, onLock, controlsPos, onControlsPosChange }, ref) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragStartRef = useRef({ x: 0, y: 0, initialTx: 0, initialTy: 0 });
 
@@ -78,7 +83,6 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
             transformOrigin: 'center center',
-            opacity: opacity,
             pointerEvents: isInteractive ? 'auto' : 'none',
             cursor: isInteractive ? (isDragging ? 'grabbing' : 'grab') : 'default',
           }}
@@ -91,6 +95,16 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
             alt="Overlay" 
             className="max-w-[80vw] max-h-[80vh] object-contain shadow-lg border border-black/10"
             draggable={false}
+            style={{ opacity: opacity }}
+          />
+
+          <DraggableImageControls 
+            isLocked={false}
+            onToggleLock={onLock}
+            onRemove={onRemove}
+            title="Active Image Controls"
+            posState={controlsPos}
+            onPosChange={onControlsPosChange}
           />
           
           {/* Render GCP markers on the image */}
