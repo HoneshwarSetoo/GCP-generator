@@ -15,6 +15,7 @@ import { BatchProcessSection } from './components/BatchProcessSection';
 import { CustomCropSection } from './components/CustomCropSection';
 import { GCPDownloadStep } from './components/GCPDownloadStep';
 import { RenderHealthStatus } from './components/RenderHealthStatus';
+import { FullScreenLoader } from './components/FullScreenLoader';
 import { useWorkflowStepper } from './hooks/useWorkflowStepper';
 import { useEffect, useState } from 'react';
 
@@ -152,6 +153,10 @@ export function GCPPointsContent() {
       )}
 
       <RenderHealthStatus />
+
+      {isLoading && (
+        <FullScreenLoader message="Generating TIFF and downloading..." />
+      )}
     </div>
   );
 }
