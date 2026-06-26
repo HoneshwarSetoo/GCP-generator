@@ -8,6 +8,7 @@ export function useWorkflowStepper() {
   const goToCustomCrop = () => setCurrentStep('custom_crop');
   const goToAlign = () => setCurrentStep('align');
   const goToUpload = () => setCurrentStep('upload');
+  const goToDownload = () => setCurrentStep('download');
 
   return {
     currentStep,
@@ -16,5 +17,6 @@ export function useWorkflowStepper() {
     goToCustomCrop,
     goToAlign,
     goToUpload,
+    goToDownload,
   };
 }

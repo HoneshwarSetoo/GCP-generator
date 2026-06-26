@@ -12,6 +12,7 @@ export function WorkflowStepper({ currentStep }: WorkflowStepperProps) {
     { id: 'process', label: 'Process' },
     { id: 'custom_crop', label: 'Custom Crop' },
     { id: 'align', label: 'Generate TIFF' },
+    { id: 'download', label: 'Download & Preview' },
   ];
 
   const getStepIndex = (stepId: WorkflowStep) => steps.findIndex(s => s.id === stepId);
