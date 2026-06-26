@@ -58,28 +58,49 @@ export function useGCPMapInteractions({
       const nePixel = proj.fromLatLngToContainerPixel(new google.maps.LatLng(img.bounds.north, img.bounds.east));
       
       if (swPixel && nePixel) {
-        const targetWidth = nePixel.x - swPixel.x;
-        const targetHeight = swPixel.y - nePixel.y;
-        const targetScale = targetWidth / savedRenderedWidthRef.current;
-        const targetCenterX = swPixel.x + targetWidth / 2;
-        const targetCenterY = nePixel.y + targetHeight / 2;
-        const containerCenterX = mapDiv.clientWidth / 2;
-        const containerCenterY = mapDiv.clientHeight / 2;
+        const renderedW = nePixel.x - swPixel.x;
+        const renderedH = swPixel.y - nePixel.y;
         
-        handleTransformChange({ 
-          x: targetCenterX - containerCenterX, 
-          y: targetCenterY - containerCenterY, 
-          scale: targetScale,
-          rotation: 0
-        });
-      }
-    }
+        const originalRatio = (img.dimensions?.width || 1) / (img.dimensions?.height || 1);
+        const renderedRatio = renderedW / renderedH;
+        
+        let scale = 1;
+        if (Math.abs(originalRatio - renderedRatio) > 0.01) {
+          const expectedH = renderedW / originalRatio;
+          scale = expectedH / renderedH;
+        }
 
-    setImages(prev => prev.map(i => i.id === img.id ? { ...i, isLocked: false, bounds: null } : i));
-    setGcps(prev => prev.filter(gcp => gcp.imageId !== img.id));
+        const mapCenterX = mapDiv.clientWidth / 2;
+        const mapCenterY = mapDiv.clientHeight / 2;
+        const imgCenterX = swPixel.x + renderedW / 2;
+        const imgCenterY = nePixel.y + renderedH / 2;
+        
+        const tx = imgCenterX - mapCenterX;
+        const ty = imgCenterY - mapCenterY;
+        
+        setImages(prev => prev.map(i => i.id === img.id ? {
+          ...i,
+          isLocked: false,
+          bounds: null,
+          transform: { x: tx, y: ty, scale: scale, rotation: 0 }
+        } : i));
+      }
+    } else {
+      setImages(prev => prev.map(i => i.id === img.id ? {
+        ...i,
+        isLocked: false,
+        bounds: null
+      } : i));
+    }
+    
     setMode('align');
-    toast.info('Image unlocked');
-  }, [setImages, setGcps, handleTransformChange, setActiveImageId, setMode, projectionRef, mapContainerRef, savedRenderedWidthRef]);
+    setGcps(prev => prev.filter(gcp => gcp.imageId !== img.id));
+    toast.success("Image unlocked. Re-align as needed.");
+  }, [setActiveImageId, projectionRef, mapContainerRef, savedRenderedWidthRef, setImages, setMode, setGcps]);
+
+  const handleToggleVisibility = useCallback((id: string) => {
+    setImages(prev => prev.map(img => img.id === id ? { ...img, isHidden: !img.isHidden } : img));
+  }, [setImages]);
 
   const handleControlsPosChange = useCallback((id: string, pos: { edge: 'top' | 'bottom' | 'left' | 'right'; percent: number }) => {
     setImages(prev => prev.map(img => img.id === id ? { ...img, controlsPos: pos } : img));
@@ -220,6 +241,7 @@ export function useGCPMapInteractions({
     handleControlsPosChange,
     handleToggleLock,
     onMapClick,
-    handleMarkerDragEnd
+    handleMarkerDragEnd,
+    handleToggleVisibility
   };
 }

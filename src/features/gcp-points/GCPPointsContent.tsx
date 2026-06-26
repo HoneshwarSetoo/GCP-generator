@@ -10,6 +10,11 @@ import { ImageUploadSection } from './components/ImageUploadSection';
 import { UploadedImagesSection } from './components/UploadedImagesSection';
 import { MapOverlayAlignment } from './components/MapOverlayAlignment';
 import { SelectedPointsSection } from './components/SelectedPointsSection';
+import { WorkflowStepper } from './components/WorkflowStepper';
+import { BatchProcessSection } from './components/BatchProcessSection';
+import { CustomCropSection } from './components/CustomCropSection';
+import { useWorkflowStepper } from './hooks/useWorkflowStepper';
+import { useEffect } from 'react';
 
 export function GCPPointsContent() {
   const { 
@@ -20,10 +25,18 @@ export function GCPPointsContent() {
   } = useGCPPoints();
 
   const {
-    opacity, setOpacity, mode, setMode, setMapInstance,
+    opacity, setOpacity, mode, setMode, mapInstance, setMapInstance,
     activeImage, isLocked, imageBounds, imageDimensions,
     localTransform, handleTransformChange,
   } = useGCPMapState(images, setImages, activeImageId);
+
+  const { currentStep, setCurrentStep, goToProcess, goToCustomCrop, goToAlign } = useWorkflowStepper();
+
+  useEffect(() => {
+    if (currentStep === 'upload' && images.length > 0) {
+      goToProcess();
+    }
+  }, [images.length, currentStep, goToProcess]);
 
   const imageRef = useRef<HTMLImageElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -59,37 +72,50 @@ export function GCPPointsContent() {
         </p>
       </div>
 
-      {images.length === 0 && (
+      <WorkflowStepper currentStep={currentStep} />
+
+      {currentStep === 'upload' && (
         <ImageUploadSection handleImageUpload={handleImageUpload} />
       )}
 
-      {images.length > 0 && (
-        <UploadedImagesSection 
+      {currentStep === 'process' && (
+        <BatchProcessSection 
           images={images} 
-          activeImageId={activeImageId} 
-          setActiveImageId={setActiveImageId}
-          activeImage={activeImage}
-          setMode={setMode}
+          setImages={setImages} 
+          onCustomCrop={goToCustomCrop} 
+          onProceed={goToAlign} 
         />
       )}
 
-      {images.length > 0 && (
+      {currentStep === 'custom_crop' && (
+        <CustomCropSection 
+          images={images} 
+          setImages={setImages} 
+          onBack={goToProcess} 
+          onProceed={goToAlign} 
+        />
+      )}
+
+      {currentStep === 'align' && images.length > 0 && (
         <>
+          <UploadedImagesSection 
+            images={images} 
+            activeImageId={activeImageId} 
+            setActiveImageId={setActiveImageId}
+            activeImage={activeImage}
+            setMode={setMode}
+          />
           <MapOverlayAlignment 
             images={images} gcps={gcps} activeImageId={activeImageId} activeImage={activeImage}
             setActiveImageId={setActiveImageId} isLocked={isLocked} opacity={opacity} setOpacity={setOpacity}
             mode={mode} setMode={setMode} handleSubmit={handleSubmit} mapContainerRef={mapContainerRef}
-            imageRef={imageRef} projectionRef={projectionRef} setMapInstance={setMapInstance}
+            imageRef={imageRef} projectionRef={projectionRef} mapInstance={mapInstance} setMapInstance={setMapInstance}
             onMapClick={interactions.onMapClick} handleMarkerDragEnd={interactions.handleMarkerDragEnd}
             localTransform={localTransform} handleTransformChange={handleTransformChange}
             handleRemoveFromMap={interactions.handleRemoveFromMap} handleToggleLock={interactions.handleToggleLock}
             handleControlsPosChange={interactions.handleControlsPosChange} handleUnlockSpecificImage={interactions.handleUnlockSpecificImage}
+            handleToggleVisibility={interactions.handleToggleVisibility}
           />
-
-          {/* <SelectedPointsSection 
-            gcps={gcps} activeImage={activeImage} handleRemoveGcp={handleRemoveGcp}
-            handleSubmit={handleSubmit} isLoading={isLoading}
-          /> */}
         </>
       )}
     </div>

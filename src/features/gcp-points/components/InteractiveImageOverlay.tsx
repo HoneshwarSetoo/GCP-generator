@@ -18,7 +18,14 @@ interface InteractiveImageOverlayProps {
 export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveImageOverlayProps>(
   ({ imageUrl, opacity, isInteractive, gcps, transform, onTransformChange, onRemove, onLock, controlsPos, onControlsPosChange }, ref) => {
     const [isDragging, setIsDragging] = useState(false);
+    const [showCtrlMessage, setShowCtrlMessage] = useState(false);
     const dragStartRef = useRef({ x: 0, y: 0, initialTx: 0, initialTy: 0 });
+    const containerRef = useRef<HTMLDivElement>(null);
+    const transformRef = useRef(transform);
+
+    useEffect(() => {
+      transformRef.current = transform;
+    }, [transform]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
       if (!isInteractive) return;
@@ -59,25 +66,56 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
       };
     }, [isDragging, isInteractive]);
 
-    const handleWheel = (e: React.WheelEvent) => {
-      if (!isInteractive) return;
-      e.preventDefault();
-      
-      const scaleSensitivity = 0.001;
-      const delta = -e.deltaY * scaleSensitivity;
-      const newScale = Math.max(0.1, Math.min(transform.scale * Math.exp(delta), 10));
-      
-      onTransformChange({
-        ...transform,
-        scale: newScale,
-      });
-    };
+    useEffect(() => {
+      const container = containerRef.current;
+      if (!container || !isInteractive) return;
+
+      let messageTimeout: NodeJS.Timeout;
+
+      const handleNativeWheel = (e: WheelEvent) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault(); // Prevent page scroll
+          setShowCtrlMessage(false);
+          const scaleSensitivity = 0.001;
+          const delta = -e.deltaY * scaleSensitivity;
+          const currentTransform = transformRef.current;
+          const newScale = Math.max(0.1, Math.min(currentTransform.scale * Math.exp(delta), 10));
+          
+          onTransformChange({
+            ...currentTransform,
+            scale: newScale,
+          });
+        } else {
+          // Not holding Ctrl, show message and let page scroll normally
+          setShowCtrlMessage(true);
+          clearTimeout(messageTimeout);
+          messageTimeout = setTimeout(() => setShowCtrlMessage(false), 2000);
+        }
+      };
+
+      // Native event listener required to reliably preventDefault for scroll
+      container.addEventListener('wheel', handleNativeWheel, { passive: false });
+      return () => {
+        container.removeEventListener('wheel', handleNativeWheel);
+        clearTimeout(messageTimeout);
+      };
+    }, [isInteractive, onTransformChange]);
 
     return (
       <div 
+        ref={containerRef}
         className="absolute inset-0 overflow-hidden flex items-center justify-center pointer-events-none"
-        style={{ zIndex: 10 }}
+        style={{ zIndex: 1 }}
       >
+        {/* Ctrl Message Overlay */}
+        <div 
+          className={`absolute inset-0 z-50 flex items-center justify-center bg-black/40 transition-opacity duration-300 ${showCtrlMessage ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        >
+          <div className="bg-background px-6 py-3 rounded-lg shadow-lg text-lg font-medium">
+            Use ctrl + scroll to zoom the map
+          </div>
+        </div>
+
         <div 
           className="relative"
           style={{
@@ -87,7 +125,6 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
             cursor: isInteractive ? (isDragging ? 'grabbing' : 'grab') : 'default',
           }}
           onMouseDown={handleMouseDown}
-          onWheel={handleWheel}
         >
           <img 
             ref={ref}
@@ -98,15 +135,6 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
             style={{ opacity: opacity }}
           />
 
-          <DraggableImageControls 
-            isLocked={false}
-            onToggleLock={onLock}
-            onRemove={onRemove}
-            title="Active Image Controls"
-            posState={controlsPos}
-            onPosChange={onControlsPosChange}
-          />
-          
           {/* Render GCP markers on the image */}
           {gcps.map((gcp) => {
             const imgRef = ref as React.RefObject<HTMLImageElement | null>;
