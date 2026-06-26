@@ -21,10 +21,15 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
     const [showCtrlMessage, setShowCtrlMessage] = useState(false);
     const dragStartRef = useRef({ x: 0, y: 0, initialTx: 0, initialTy: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
-    const transformRef = useRef(transform);
+    const imageContainerRef = useRef<HTMLDivElement>(null);
+    const localTransformRef = useRef(transform);
+    const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-      transformRef.current = transform;
+      localTransformRef.current = transform;
+      if (imageContainerRef.current) {
+        imageContainerRef.current.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+      }
     }, [transform]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
@@ -44,15 +49,21 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
         if (!isDragging || !isInteractive) return;
         const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
-        onTransformChange({
-          scale: transform.scale,
+        
+        localTransformRef.current = {
+          ...localTransformRef.current,
           x: dragStartRef.current.initialTx + dx,
           y: dragStartRef.current.initialTy + dy,
-        });
+        };
+
+        if (imageContainerRef.current) {
+          imageContainerRef.current.style.transform = `translate(${localTransformRef.current.x}px, ${localTransformRef.current.y}px) scale(${localTransformRef.current.scale})`;
+        }
       };
 
       const handleMouseUp = () => {
         setIsDragging(false);
+        onTransformChange(localTransformRef.current);
       };
 
       if (isDragging) {
@@ -78,13 +89,22 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
           setShowCtrlMessage(false);
           const scaleSensitivity = 0.001;
           const delta = -e.deltaY * scaleSensitivity;
-          const currentTransform = transformRef.current;
+          const currentTransform = localTransformRef.current;
           const newScale = Math.max(0.1, Math.min(currentTransform.scale * Math.exp(delta), 10));
           
-          onTransformChange({
+          localTransformRef.current = {
             ...currentTransform,
             scale: newScale,
-          });
+          };
+
+          if (imageContainerRef.current) {
+            imageContainerRef.current.style.transform = `translate(${localTransformRef.current.x}px, ${localTransformRef.current.y}px) scale(${localTransformRef.current.scale})`;
+          }
+
+          if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+          debounceTimeoutRef.current = setTimeout(() => {
+            onTransformChange(localTransformRef.current);
+          }, 150);
         } else {
           // Not holding Ctrl, show message and let page scroll normally
           setShowCtrlMessage(true);
@@ -98,6 +118,7 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
       return () => {
         container.removeEventListener('wheel', handleNativeWheel);
         clearTimeout(messageTimeout);
+        if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       };
     }, [isInteractive, onTransformChange]);
 
@@ -117,12 +138,15 @@ export const InteractiveImageOverlay = forwardRef<HTMLImageElement, InteractiveI
         </div>
 
         <div 
+          ref={imageContainerRef}
           className="relative"
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
             transformOrigin: 'center center',
             pointerEvents: isInteractive ? 'auto' : 'none',
             cursor: isInteractive ? (isDragging ? 'grabbing' : 'grab') : 'default',
+            transition: isDragging ? 'none' : 'transform 0.15s ease-out',
+            willChange: 'transform'
           }}
           onMouseDown={handleMouseDown}
         >
