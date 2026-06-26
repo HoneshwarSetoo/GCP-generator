@@ -71,9 +71,9 @@ function OverlaySidebar({
                         onClick={() => handleNavigateToImage(img)}
                       >
                     <img 
-                      src={img.url} 
+                      src={img.processedUrl || img.url} 
                       alt={img.name} 
-                      className="w-[200px] mx-auto object-cover shadow-sm border border-border group-hover/item:opacity-80 transition-opacity"
+                      className="w-[200px] mx-auto object-contain shadow-sm border border-border group-hover/item:opacity-80 transition-opacity"
                     />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity pointer-events-none">
                       <div className="bg-black/60 text-white p-2 rounded-full shadow-lg">
@@ -236,7 +236,7 @@ export function MapOverlayAlignment({
   handleSubmit, mapContainerRef, imageRef, projectionRef, mapInstance, setMapInstance, onMapClick, handleMarkerDragEnd,
   localTransform, handleTransformChange, handleRemoveFromMap, handleToggleLock, handleControlsPosChange, handleUnlockSpecificImage, handleToggleVisibility
 }: MapOverlayAlignmentProps) {
-  const imageUrl = activeImage?.url || null;
+  const imageUrl = activeImage?.processedUrl || activeImage?.url || null;
 
   return (
     <Card className="shadow-sm">

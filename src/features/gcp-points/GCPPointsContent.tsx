@@ -15,7 +15,7 @@ import { BatchProcessSection } from './components/BatchProcessSection';
 import { CustomCropSection } from './components/CustomCropSection';
 import { GCPDownloadStep } from './components/GCPDownloadStep';
 import { useWorkflowStepper } from './hooks/useWorkflowStepper';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function GCPPointsContent() {
   const {
@@ -36,6 +36,12 @@ export function GCPPointsContent() {
   } = useGCPMapState(images, setImages, activeImageId);
 
   const { currentStep, setCurrentStep, goToProcess, goToCustomCrop, goToAlign } = useWorkflowStepper();
+  const [customCropImageId, setCustomCropImageId] = useState<string | undefined>(undefined);
+
+  const handleCustomCrop = (imageId?: string) => {
+    setCustomCropImageId(imageId);
+    goToCustomCrop();
+  };
 
   useEffect(() => {
     if (currentStep === 'upload' && images.length > 0) {
@@ -92,20 +98,21 @@ export function GCPPointsContent() {
       )}
 
       {currentStep === 'process' && (
-        <BatchProcessSection
-          images={images}
-          setImages={setImages}
-          onCustomCrop={goToCustomCrop}
-          onProceed={goToAlign}
+        <BatchProcessSection 
+          images={images} 
+          setImages={setImages} 
+          onCustomCrop={handleCustomCrop} 
+          onProceed={goToAlign} 
         />
       )}
 
       {currentStep === 'custom_crop' && (
-        <CustomCropSection
-          images={images}
-          setImages={setImages}
-          onBack={goToProcess}
-          onProceed={goToAlign}
+        <CustomCropSection 
+          images={images} 
+          setImages={setImages} 
+          onBack={goToProcess} 
+          onProceed={goToAlign} 
+          initialImageId={customCropImageId}
         />
       )}
 
