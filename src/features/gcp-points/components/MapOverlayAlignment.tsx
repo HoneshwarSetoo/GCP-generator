@@ -10,6 +10,7 @@ import { GCP, UploadedImage } from '../types';
 import { createPortal } from 'react-dom';
 import { useState, useEffect } from 'react';
 import { Layers, Eye, EyeOff, Lock, Unlock, Trash2, ChevronRight } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/features/ui/tooltip';
 
 function OverlaySidebar({ 
   images, 
@@ -53,7 +54,8 @@ function OverlaySidebar({
       </div>
 
       {/* Expanded panel */}
-      <div className="hidden group-hover:flex flex-col bg-white rounded-r-md shadow-[4px_0_12px_rgba(0,0,0,0.15)] border border-l-0 border-border w-72 h-[60vh] overflow-hidden transition-all origin-left animate-in fade-in slide-in-from-left-2 duration-200">
+      <TooltipProvider>
+        <div className="hidden group-hover:flex flex-col bg-white rounded-r-md shadow-[4px_0_12px_rgba(0,0,0,0.15)] border border-l-0 border-border w-72 h-[60vh] overflow-hidden transition-all origin-left animate-in fade-in slide-in-from-left-2 duration-200">
         <div className="p-3 border-b border-border bg-muted/30 font-semibold text-sm flex items-center gap-2">
           <Layers size={16} /> Map Overlays
         </div>
@@ -62,11 +64,12 @@ function OverlaySidebar({
              const isActive = img.id === activeImageId;
              return (
                <div key={img.id} className="flex flex-col p-2 rounded-md bg-muted/50 border border-transparent hover:border-border/50 transition-colors group/item">
-                  <div 
-                    className="relative cursor-pointer mb-2 rounded overflow-hidden" 
-                    onClick={() => handleNavigateToImage(img)}
-                    title="Click to locate on map"
-                  >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div 
+                        className="relative cursor-pointer mb-2 rounded overflow-hidden" 
+                        onClick={() => handleNavigateToImage(img)}
+                      >
                     <img 
                       src={img.url} 
                       alt={img.name} 
@@ -77,35 +80,60 @@ function OverlaySidebar({
                         <MapPin size={24} />
                       </div>
                     </div>
-                  </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Click to locate on map</p>
+                  </TooltipContent>
+                </Tooltip>
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium text-gray-800 flex-1 min-w-0" title={img.name}>
                       {img.name}
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
-                     <button onClick={() => handleToggleVisibility(img.id)} className="p-1.5 hover:bg-white hover:shadow-sm rounded transition-all" title="Toggle Visibility">
-                        {img.isHidden ? <EyeOff size={14} className="text-muted-foreground" /> : <Eye size={14} className="text-blue-600" />}
-                     </button>
-                     <button 
-                       onClick={() => {
-                         if (isActive) {
-                           handleToggleLock();
-                         } else {
-                           if (activeImageId) {
-                             toast.error("Previous image must be locked before editing a new one.");
-                           } else {
-                             handleUnlockSpecificImage(img);
-                           }
-                         }
-                       }} 
-                       className="p-1.5 hover:bg-white hover:shadow-sm rounded transition-all"
-                       title={isActive ? "Lock Image" : "Unlock Image"}
-                     >
-                        {isActive ? <Unlock size={14} className="text-orange-500" /> : <Lock size={14} className="text-green-600" />}
-                     </button>
-                      <button onClick={() => handleRemoveFromMap(img.id)} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-red-500 transition-all" title="Remove">
-                         <Trash2 size={14} />
-                      </button>
+                     <Tooltip>
+                       <TooltipTrigger asChild>
+                         <button onClick={() => handleToggleVisibility(img.id)} className="p-1.5 hover:bg-white hover:shadow-sm rounded transition-all">
+                            {img.isHidden ? <EyeOff size={14} className="text-muted-foreground" /> : <Eye size={14} className="text-blue-600" />}
+                         </button>
+                       </TooltipTrigger>
+                       <TooltipContent>
+                         <p>Toggle Visibility</p>
+                       </TooltipContent>
+                     </Tooltip>
+                     <Tooltip>
+                       <TooltipTrigger asChild>
+                         <button 
+                           onClick={() => {
+                             if (isActive) {
+                               handleToggleLock();
+                             } else {
+                               if (activeImageId) {
+                                 toast.error("Previous image must be locked before editing a new one.");
+                               } else {
+                                 handleUnlockSpecificImage(img);
+                               }
+                             }
+                           }} 
+                           className="p-1.5 hover:bg-white hover:shadow-sm rounded transition-all"
+                         >
+                            {isActive ? <Unlock size={14} className="text-orange-500" /> : <Lock size={14} className="text-green-600" />}
+                         </button>
+                       </TooltipTrigger>
+                       <TooltipContent>
+                         <p>{isActive ? "Lock Image" : "Unlock Image"}</p>
+                       </TooltipContent>
+                     </Tooltip>
+                      <Tooltip>
+                       <TooltipTrigger asChild>
+                         <button onClick={() => handleRemoveFromMap(img.id)} className="p-1.5 hover:bg-white hover:shadow-sm rounded text-red-500 transition-all">
+                            <Trash2 size={14} />
+                         </button>
+                       </TooltipTrigger>
+                       <TooltipContent>
+                         <p>Remove</p>
+                       </TooltipContent>
+                     </Tooltip>
                    </div>
                  </div>
                </div>
@@ -113,6 +141,7 @@ function OverlaySidebar({
           })}
         </div>
       </div>
+      </TooltipProvider>
     </div>
   )
 }
