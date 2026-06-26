@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import JSZip from 'jszip';
 import { GCP, UploadedImage } from '../types';
 import { toast } from 'sonner';
+import { useCreateGCPPointsMutation } from '@/store/api/gcpApi';
 
 export function useGCPPoints() {
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -11,6 +12,7 @@ export function useGCPPoints() {
   const [tiffDataUrl, setTiffDataUrl] = useState<string | null>(null);
   const [tiffFileName, setTiffFileName] = useState<string>('output.tif');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [createGCPPoints, { isLoading: isCreatingGCPPoints }] = useCreateGCPPointsMutation();
 
   const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -186,15 +188,7 @@ export function useGCPPoints() {
         }
       }
 
-      const endpoint = isBatch ? '/api/gcp-points/batch' : '/api/gcp-points';
-      const response = await fetch(endpoint, { method: 'POST', body: formData });
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(errorBody.error ?? `Server error ${response.status}`);
-      }
-
-      const buffer = await response.arrayBuffer();
+      const buffer = await createGCPPoints({ formData, isBatch }).unwrap();
 
       if (isBatch) {
         const zipBlob = new Blob([buffer], { type: 'application/zip' });
@@ -214,13 +208,13 @@ export function useGCPPoints() {
           : 'GeoTIFF generated successfully'
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      const message = getSubmitErrorMessage(error);
       console.error('Failed to generate GeoTIFF:', message);
       toast.error(`Failed to generate GeoTIFF: ${message}`);
     } finally {
       setIsLoading(false);
     }
-  }, [gcps, images]);
+  }, [createGCPPoints, gcps, images]);
 
   /** Triggers a browser download of the stored GeoTIFF data URL. */
   const handleDownload = useCallback(() => {
@@ -249,7 +243,7 @@ export function useGCPPoints() {
     setImages,
     activeImageId,
     setActiveImageId,
-    isLoading,
+    isLoading: isLoading || isCreatingGCPPoints,
     promptMessage,
     setPromptMessage,
     handleImageUpload,
@@ -264,4 +258,29 @@ export function useGCPPoints() {
     handleDownload,
     handleReset,
   };
+}
+
+function getSubmitErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+
+  if (typeof error === 'object' && error !== null && 'data' in error) {
+    const data = (error as { data?: unknown }).data;
+
+    if (typeof data === 'string') return data;
+    if (data instanceof ArrayBuffer) {
+      return new TextDecoder().decode(data) || 'Server returned an error';
+    }
+    if (typeof data === 'object' && data !== null) {
+      if ('detail' in data && typeof data.detail === 'string') return data.detail;
+      if ('error' in data && typeof data.error === 'string') return data.error;
+      return JSON.stringify(data);
+    }
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+
+  return 'Unknown error';
 }

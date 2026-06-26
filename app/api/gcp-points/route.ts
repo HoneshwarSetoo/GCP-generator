@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const PYTHON_BACKEND_URL =
-  process.env.PYTHON_BACKEND_URL || 'http://localhost:8000/geotiff';
+  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/geotiff';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let formData: FormData;
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let pythonResponse: Response;
 
   try {
-    pythonResponse = await fetch(PYTHON_BACKEND_URL, {
+    pythonResponse = await fetch(PYTHON_BACKEND_URL+"/geotiff", {
       method: 'POST',
       body: formData,
       // Do NOT set Content-Type — fetch sets the multipart boundary automatically

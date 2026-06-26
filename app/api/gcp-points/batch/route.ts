@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const PYTHON_BATCH_URL =
-  process.env.PYTHON_BACKEND_BATCH_URL || 'http://localhost:8000/geotiff/batch';
+  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/geotiff/batch';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   let formData: FormData;

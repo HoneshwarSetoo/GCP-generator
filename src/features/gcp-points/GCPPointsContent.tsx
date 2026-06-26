@@ -128,7 +128,7 @@ export function GCPPointsContent() {
           <MapOverlayAlignment
             images={images} gcps={gcps} activeImageId={activeImageId} activeImage={activeImage}
             setActiveImageId={setActiveImageId} isLocked={isLocked} opacity={opacity} setOpacity={setOpacity}
-            mode={mode} setMode={setMode} handleSubmit={handleSubmit} mapContainerRef={mapContainerRef}
+            mode={mode} setMode={setMode} handleSubmit={handleSubmit} isLoading={isLoading} mapContainerRef={mapContainerRef}
             imageRef={imageRef} projectionRef={projectionRef} mapInstance={mapInstance} setMapInstance={setMapInstance}
             onMapClick={interactions.onMapClick} handleMarkerDragEnd={interactions.handleMarkerDragEnd}
             localTransform={localTransform} handleTransformChange={handleTransformChange}

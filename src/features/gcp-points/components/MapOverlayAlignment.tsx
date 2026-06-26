@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/features/ui/card';
-import { Send, MapPin, Move } from 'lucide-react';
+import { Send, MapPin, Move, Loader2 } from 'lucide-react';
 import { GCPMap } from './GCPMap';
 import { InteractiveImageOverlay } from './InteractiveImageOverlay';
 import { DraggableImageControls } from './DraggableImageControls';
@@ -215,6 +215,7 @@ interface MapOverlayAlignmentProps {
   mode: 'align' | 'point';
   setMode: (mode: 'align' | 'point') => void;
   handleSubmit: () => void;
+  isLoading: boolean;
   mapContainerRef: React.RefObject<HTMLDivElement | null>;
   imageRef: React.RefObject<HTMLImageElement | null>;
   projectionRef: React.MutableRefObject<google.maps.MapCanvasProjection | null>;
@@ -233,7 +234,7 @@ interface MapOverlayAlignmentProps {
 
 export function MapOverlayAlignment({
   images, gcps, activeImageId, activeImage, setActiveImageId, isLocked, opacity, setOpacity, mode, setMode,
-  handleSubmit, mapContainerRef, imageRef, projectionRef, mapInstance, setMapInstance, onMapClick, handleMarkerDragEnd,
+  handleSubmit, isLoading, mapContainerRef, imageRef, projectionRef, mapInstance, setMapInstance, onMapClick, handleMarkerDragEnd,
   localTransform, handleTransformChange, handleRemoveFromMap, handleToggleLock, handleControlsPosChange, handleUnlockSpecificImage, handleToggleVisibility
 }: MapOverlayAlignmentProps) {
   const imageUrl = activeImage?.processedUrl || activeImage?.url || null;
@@ -253,10 +254,18 @@ export function MapOverlayAlignment({
 
           <button
               onClick={handleSubmit}
-              disabled={gcps.length === 0}
+              disabled={gcps.length === 0 || isLoading}
               className="flex items-center gap-1.5 px-4 py-2 bg-[#FF8A4C] text-white hover:bg-[#F27D3F] text-sm font-medium rounded-md shadow-sm transition-colors disabled:opacity-50"
             >
-              <Send size={16} /> Generate TIFF
+              {isLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Generating TIFF...
+                </>
+              ) : (
+                <>
+                  <Send size={16} /> Generate TIFF
+                </>
+              )}
             </button>
           
           <div className="flex flex-wrap items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">

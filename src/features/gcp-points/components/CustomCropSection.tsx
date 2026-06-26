@@ -617,8 +617,8 @@ export function CustomCropSection({ images, setImages, onBack, onProceed, initia
                     draggable={false}
                   />
                   
-                  {/* SVG Overlay for Mask Definition & Polygon Drawing */}
-                  <svg 
+                {/* SVG Overlay for Mask Definition & Polygon Drawing */}
+                <svg 
                     className="absolute inset-0 w-full h-full pointer-events-none"
                     viewBox={imageRef.current ? `0 0 ${imageRef.current.naturalWidth} ${imageRef.current.naturalHeight}` : '0 0 100 100'}
                     preserveAspectRatio="xMidYMid meet"
@@ -683,6 +683,7 @@ export function CustomCropSection({ images, setImages, onBack, onProceed, initia
                     />
                   )}
                 </svg>
+                </div>
               </div>
             ) : (
               <div className="text-muted-foreground">Select an image to edit</div>

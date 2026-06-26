@@ -1,17 +1,17 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import type { GCPPayload } from '@/features/gcp-points/types';
 
 export const gcpApi = createApi({
   reducerPath: 'gcpApi',
   baseQuery: fetchBaseQuery({
-    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || '/api',
+    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000',
   }),
   endpoints: (builder) => ({
-    createGCPPoints: builder.mutation<{ success: boolean; message?: string }, GCPPayload>({
-      query: (payload) => ({
-        url: '/gcp-points',
+    createGCPPoints: builder.mutation<ArrayBuffer, { formData: FormData; isBatch: boolean }>({
+      query: ({ formData, isBatch }) => ({
+        url: isBatch ? '/geotiff/batch' : '/geotiff',
         method: 'POST',
-        body: payload,
+        body: formData,
+        responseHandler: (response) => response.arrayBuffer(),
       }),
     }),
     autoCropImage: builder.mutation<{ success: boolean; url: string }, { id: string, url: string }>({
