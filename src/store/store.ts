@@ -7,7 +7,16 @@ export const store = configureStore({
     [gcpApi.reducerPath]: gcpApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(gcpApi.middleware),
+    getDefaultMiddleware({
+      serializableCheck: {
+        ignoredActions: [
+          `${gcpApi.reducerPath}/executeMutation/pending`,
+          `${gcpApi.reducerPath}/executeMutation/fulfilled`,
+          `${gcpApi.reducerPath}/executeMutation/rejected`,
+        ],
+        ignoredPaths: [`${gcpApi.reducerPath}.mutations`],
+      },
+    }).concat(gcpApi.middleware),
 });
 
 setupListeners(store.dispatch);
