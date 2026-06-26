@@ -22,9 +22,14 @@ export interface UploadedImage {
   id: string;
   name: string;
   url: string;
+  processedUrl?: string;
+  processingStatus?: 'idle' | 'processing' | 'done' | 'error';
   isLocked: boolean;
   bounds: { north: number; south: number; east: number; west: number } | null;
   dimensions: { width: number; height: number } | null;
   transform: { x: number; y: number; scale: number; rotation: number };
   controlsPos?: { edge: 'top' | 'bottom' | 'left' | 'right'; percent: number };
+  isHidden?: boolean;
 }
+
+export type WorkflowStep = 'upload' | 'process' | 'custom_crop' | 'align' | 'download';

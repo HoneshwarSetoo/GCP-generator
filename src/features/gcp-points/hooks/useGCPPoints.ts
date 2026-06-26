@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from 'react';
 import JSZip from 'jszip';
 import { GCP, UploadedImage } from '../types';
 import { toast } from 'sonner';
-import { useCreateGeoTiffMutation } from '@/store/api/gcpApi';
 
 export function useGCPPoints() {
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -11,8 +10,7 @@ export function useGCPPoints() {
   const [promptMessage, setPromptMessage] = useState<string | null>(null);
   const [tiffDataUrl, setTiffDataUrl] = useState<string | null>(null);
   const [tiffFileName, setTiffFileName] = useState<string>('output.tif');
-
-  const [createGeoTiff, { isLoading }] = useCreateGeoTiffMutation();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -142,8 +140,9 @@ export function useGCPPoints() {
   }, []);
 
   /**
-   * Sends image + GCPs to the backend, receives GeoTIFF as base64 data URL,
-   * and stores it in state for preview. Does not auto-download or reset.
+   * Sends images + GCPs to the backend as multipart/form-data.
+   * - Single image  → POST /api/gcp-points        → returns GeoTIFF binary
+   * - Multiple images → POST /api/gcp-points/batch → returns ZIP of GeoTIFFs
    */
   const handleSubmit = useCallback(async () => {
     if (gcps.length === 0) {
@@ -151,32 +150,77 @@ export function useGCPPoints() {
       return;
     }
 
+    const pointsByImage = gcps.reduce((acc, gcp) => {
+      const imgId = gcp.imageId;
+      if (!imgId) return acc;
+      if (!acc[imgId]) acc[imgId] = [];
+      acc[imgId].push(gcp);
+      return acc;
+    }, {} as Record<string, GCP[]>);
+
+    const imageEntries = Object.entries(pointsByImage);
+    const isBatch = imageEntries.length > 1;
+
+    setIsLoading(true);
     try {
-      const pointsByImage = gcps.reduce((acc, gcp) => {
-        const imgId = gcp.imageId;
-        if (!imgId) return acc;
-        if (!acc[imgId]) {
-          acc[imgId] = [];
+      const formData = new FormData();
+
+      for (const [imageId, imageGcps] of imageEntries) {
+        const image = images.find((img) => img.id === imageId);
+        if (!image) {
+          toast.error(`Image not found for ID: ${imageId}`);
+          continue;
         }
-        acc[imgId].push(gcp);
-        return acc;
-      }, {} as Record<string, GCP[]>);
 
-      const payloadPoints = Object.entries(pointsByImage).map(([image_id, gcp_points]) => ({
-        image_id,
-        gcp_points
-      }));
+        const blobResponse = await fetch(image.url);
+        const imageBlob = await blobResponse.blob();
 
-      await createGCPPoints({ points: payloadPoints }).unwrap();
-      toast.success('GCP points submitted successfully');
-      setGcps([]); // Clear after successful submission
-      setImages([]);
-      setActiveImageId(null);
+        if (isBatch) {
+          // Batch: append all images and their GCP arrays in parallel arrays
+          formData.append('images', imageBlob, image.name);
+          formData.append('points', JSON.stringify(imageGcps));
+        } else {
+          // Single: use the simpler single-image field names
+          formData.append('image', imageBlob, image.name);
+          formData.append('points', JSON.stringify(imageGcps));
+        }
+      }
+
+      const endpoint = isBatch ? '/api/gcp-points/batch' : '/api/gcp-points';
+      const response = await fetch(endpoint, { method: 'POST', body: formData });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorBody.error ?? `Server error ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+
+      if (isBatch) {
+        const zipBlob = new Blob([buffer], { type: 'application/zip' });
+        setTiffDataUrl(URL.createObjectURL(zipBlob));
+        setTiffFileName('georeferenced_batch.zip');
+      } else {
+        const tifBlob = new Blob([buffer], { type: 'image/tiff' });
+        const firstImage = images.find((img) => img.id === imageEntries[0][0]);
+        const stem = firstImage?.name.replace(/\.[^.]+$/, '') ?? 'output';
+        setTiffDataUrl(URL.createObjectURL(tifBlob));
+        setTiffFileName(`${stem}_georef.tif`);
+      }
+
+      toast.success(
+        isBatch
+          ? `Batch complete — ${imageEntries.length} GeoTIFFs ready as ZIP`
+          : 'GeoTIFF generated successfully'
+      );
     } catch (error) {
-      console.error('Failed to generate GeoTIFF:', error);
-      toast.error('Failed to generate GeoTIFF. Is the Python backend running?');
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Failed to generate GeoTIFF:', message);
+      toast.error(`Failed to generate GeoTIFF: ${message}`);
+    } finally {
+      setIsLoading(false);
     }
-  }, [gcps, imageFile, createGeoTiff]);
+  }, [gcps, images]);
 
   /** Triggers a browser download of the stored GeoTIFF data URL. */
   const handleDownload = useCallback(() => {
@@ -194,8 +238,8 @@ export function useGCPPoints() {
   const handleReset = useCallback(() => {
     setTiffDataUrl(null);
     setGcps([]);
-    setImageFile(null);
-    setImageUrl(null);
+    setImages([]);
+    setActiveImageId(null);
   }, []);
 
   return {
