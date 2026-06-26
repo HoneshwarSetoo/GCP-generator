@@ -147,3 +147,8 @@ async def generate_geotiff_batch(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="georeferenced_batch.zip"'},
     )
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
