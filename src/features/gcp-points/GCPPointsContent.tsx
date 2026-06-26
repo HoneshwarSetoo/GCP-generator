@@ -92,8 +92,6 @@ export function GCPPointsContent() {
         </p>
       </div>
 
-      <RenderHealthStatus />
-
       <WorkflowStepper currentStep={currentStep} />
 
       {currentStep === 'upload' && (
@@ -152,6 +150,8 @@ export function GCPPointsContent() {
           onReset={handleReset}
         />
       )}
+
+      <RenderHealthStatus />
     </div>
   );
 }
