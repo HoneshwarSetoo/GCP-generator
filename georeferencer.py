@@ -1,29 +1,25 @@
 """
 georeferencer.py
 Pure-function service that converts raw image bytes + GCP list into
-a warped GeoTIFF (bytes) using GDAL.
-
-Steps
------
-1. Detect image format from magic bytes; write to temp file with correct extension.
-2. Open with gdal.Open().
-3. Convert each GCP dict → gdal.GCP and attach via SetGCPs().
-4. Set coordinate reference system (EPSG:4326 by default).
-5. Warp to an in-memory GeoTIFF with gdal.Warp().
-6. Read and return the GeoTIFF bytes.
+a warped GeoTIFF (bytes) using rasterio (bundled GDAL — no system install needed).
 """
 
 import os
 import tempfile
 import logging
+import struct
 from typing import List, Dict, Any, Tuple
 
-from osgeo import gdal
+import numpy as np
+import rasterio
+from rasterio.control import GroundControlPoint
+from rasterio.crs import CRS
+from rasterio.transform import from_gcps
+from rasterio.warp import reproject, Resampling, calculate_default_transform
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
-
-# Route GDAL errors through Python logger instead of stderr
-gdal.UseExceptions()
 
 # --- Magic-byte signatures for supported image formats ---
 _FORMAT_SIGNATURES: List[Tuple[bytes, str]] = [
@@ -32,37 +28,32 @@ _FORMAT_SIGNATURES: List[Tuple[bytes, str]] = [
     (b'GIF87a', '.gif'),
     (b'GIF89a', '.gif'),
     (b'BM', '.bmp'),
-    (b'II*\x00', '.tif'),   # TIFF little-endian
-    (b'MM\x00*', '.tif'),   # TIFF big-endian
+    (b'II*\x00', '.tif'),
+    (b'MM\x00*', '.tif'),
 ]
 
-WGS84_WKT = (
-    'GEOGCS["WGS 84",DATUM["WGS_1984",'
-    'SPHEROID["WGS 84",6378137,298.257223563]],'
-    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
-)
+WGS84 = CRS.from_epsg(4326)
 
 
 def _detect_extension(image_bytes: bytes) -> str:
-    """Return a file extension based on magic bytes, defaulting to '.jpg'."""
     for signature, ext in _FORMAT_SIGNATURES:
         if image_bytes.startswith(signature):
             return ext
     return '.jpg'
 
 
-def _build_gdal_gcps(gcp_list: List[Dict[str, Any]]) -> List[gdal.GCP]:
-    """Convert a list of GCP dicts to gdal.GCP objects."""
+def _build_rasterio_gcps(gcp_list: List[Dict[str, Any]]) -> List[GroundControlPoint]:
+    """Convert GCP dicts to rasterio GroundControlPoint objects."""
     result = []
     for idx, point in enumerate(gcp_list):
-        gcp = gdal.GCP(
-            float(point["geo_lon"]),            # GCPPixel → longitude (X)
-            float(point["geo_lat"]),            # GCPLine  → latitude  (Y)
-            float(point.get("altitude") or 0.0),
-            float(point["pxcel_x"]),
-            float(point["pxcel_y"]),
-            point.get("label", f"GCP-{idx + 1}"),
-            str(idx + 1),
+        gcp = GroundControlPoint(
+            row=float(point["pxcel_y"]),
+            col=float(point["pxcel_x"]),
+            x=float(point["geo_lon"]),
+            y=float(point["geo_lat"]),
+            z=float(point.get("altitude") or 0.0),
+            id=str(idx + 1),
+            info=point.get("label", f"GCP-{idx + 1}"),
         )
         result.append(gcp)
     return result
@@ -83,72 +74,82 @@ def georeference(image_bytes: bytes, gcp_list: List[Dict[str, Any]]) -> bytes:
     -------
     bytes
         Binary content of the output GeoTIFF.
-
-    Raises
-    ------
-    ValueError
-        If gcp_list is empty or a required key is missing.
-    RuntimeError
-        If GDAL fails to open, copy, or warp the image.
     """
     if not gcp_list:
         raise ValueError("At least one GCP point is required.")
 
-    ext = _detect_extension(image_bytes)
+    # Step 1: Decode image to numpy array via Pillow
+    try:
+        pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as exc:
+        raise RuntimeError(f"Could not decode image bytes: {exc}") from exc
 
-    # ignore_cleanup_errors=True prevents Windows PermissionError when GDAL
-    # still holds a handle on temp files during directory cleanup.
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir:
-        # Use correct extension so GDAL can detect the image driver on Windows
-        input_path = os.path.join(tmp_dir, f"input_image{ext}")
+    img_array = np.array(pil_img)  # shape: (H, W, 3)
+    height, width = img_array.shape[:2]
+
+    # Step 2: Build rasterio GCPs
+    gcps = _build_rasterio_gcps(gcp_list)
+
+    # Step 3: Derive affine transform from GCPs
+    transform = from_gcps(gcps)
+
+    # Step 4: Write a GeoTIFF with GCPs embedded, then warp it
+    with tempfile.TemporaryDirectory() as tmp_dir:
         gcp_path = os.path.join(tmp_dir, "gcp_image.tif")
         output_path = os.path.join(tmp_dir, "output.tif")
 
-        # Step 1: Write raw image bytes to disk
-        with open(input_path, "wb") as fh:
-            fh.write(image_bytes)
+        # Write source TIF with GCPs (no transform yet — raw pixel space)
+        with rasterio.open(
+            gcp_path,
+            "w",
+            driver="GTiff",
+            height=height,
+            width=width,
+            count=3,
+            dtype=img_array.dtype,
+            crs=WGS84,
+        ) as dst:
+            for i in range(3):
+                dst.write(img_array[:, :, i], i + 1)
+            dst.update_tags(ns="rio_overview", resampling="nearest")
+            # Write GCPs into the file
+            dst.gcps = (gcps, WGS84)
 
-        # Step 2: Open the image with GDAL
-        try:
-            src_ds = gdal.Open(input_path, gdal.GA_ReadOnly)
-        except Exception as exc:
-            raise RuntimeError(f"GDAL could not open the uploaded image: {exc}") from exc
+        # Step 5: Warp using GCPs → regular georeferenced GeoTIFF
+        with rasterio.open(gcp_path) as src:
+            src_gcps, src_crs = src.gcps
 
-        if src_ds is None:
-            raise RuntimeError(
-                "GDAL returned None while opening the image. "
-                f"Detected format: '{ext}'. Ensure the file is a valid JPG or PNG."
+            calc_transform, calc_width, calc_height = calculate_default_transform(
+                src_crs,
+                WGS84,
+                src.width,
+                src.height,
+                gcps=src_gcps,
             )
 
-        # Step 3: Copy to GeoTIFF so we can attach GCPs
-        driver = gdal.GetDriverByName("GTiff")
-        gcp_ds = driver.CreateCopy(gcp_path, src_ds, strict=0)
-        del src_ds  # explicitly release file handle before cleanup
+            profile = src.profile.copy()
+            profile.update(
+                crs=WGS84,
+                transform=calc_transform,
+                width=calc_width,
+                height=calc_height,
+                compress="lzw",
+                tiled=True,
+            )
 
-        if gcp_ds is None:
-            raise RuntimeError("GDAL could not create GeoTIFF copy of the source image.")
+            with rasterio.open(output_path, "w", **profile) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_crs=src_crs,
+                        src_transform=src.transform,
+                        dst_crs=WGS84,
+                        dst_transform=calc_transform,
+                        resampling=Resampling.bilinear,
+                        gcps=src_gcps,
+                    )
 
-        # Step 4: Attach GCPs and CRS
-        gdal_gcps = _build_gdal_gcps(gcp_list)
-        gcp_ds.SetGCPs(gdal_gcps, WGS84_WKT)
-        gcp_ds.FlushCache()
-        del gcp_ds  # explicitly release before Warp reads it
-
-        # Step 5: Warp
-        warp_options = gdal.WarpOptions(
-            format="GTiff",
-            dstSRS=WGS84_WKT,
-            tps=False,           # polynomial GCP warp
-            polynomialOrder=1,   # order 1 (affine); increase for distorted imagery
-            resampleAlg=gdal.GRA_Bilinear,
-            creationOptions=["COMPRESS=LZW", "TILED=YES"],
-        )
-        warp_result = gdal.Warp(output_path, gcp_path, options=warp_options)
-        if warp_result is None:
-            raise RuntimeError("GDAL Warp failed to produce an output file.")
-        del warp_result  # flush & release output handle
-
-        # Step 6: Read output bytes before the temp dir is deleted
         with open(output_path, "rb") as fh:
             output_bytes = fh.read()
 
@@ -169,8 +170,6 @@ def batch_georeference(
     Returns
     -------
     list of (output_filename, tiff_bytes)
-        Each tuple contains the stem of the original filename with '_georef.tif'
-        appended, plus the binary GeoTIFF content.
     """
     results = []
     for image_bytes, filename, gcp_list in items:
