@@ -42,9 +42,9 @@ export const gcpApi = createApi({
   }),
 });
 
-export const { 
-  useCreateGCPPointsMutation, 
-  useAutoCropImageMutation, 
+export const {
+  useCreateGCPPointsMutation,
+  useAutoCropImageMutation,
   useSaveCustomCropMutation,
   useRemoveBackgroundMutation
 } = gcpApi;

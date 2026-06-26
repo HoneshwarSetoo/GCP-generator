@@ -32,4 +32,4 @@ export interface UploadedImage {
   isHidden?: boolean;
 }
 
-export type WorkflowStep = 'upload' | 'process' | 'custom_crop' | 'align';
+export type WorkflowStep = 'upload' | 'process' | 'custom_crop' | 'align' | 'download';

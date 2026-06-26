@@ -13,15 +13,20 @@ import { SelectedPointsSection } from './components/SelectedPointsSection';
 import { WorkflowStepper } from './components/WorkflowStepper';
 import { BatchProcessSection } from './components/BatchProcessSection';
 import { CustomCropSection } from './components/CustomCropSection';
+import { GCPDownloadStep } from './components/GCPDownloadStep';
 import { useWorkflowStepper } from './hooks/useWorkflowStepper';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function GCPPointsContent() {
-  const { 
+  const {
     gcps, setGcps, images, setImages, activeImageId, setActiveImageId,
-    isLoading, promptMessage, setPromptMessage, handleImageUpload, 
+    isLoading, promptMessage, setPromptMessage, handleImageUpload,
     handleAddPoint, handleRemoveGcp, handleSubmit,
     updateGCPPosition,
+    tiffDataUrl,
+    tiffFileName,
+    handleDownload,
+    handleReset,
   } = useGCPPoints();
 
   const {
@@ -31,12 +36,26 @@ export function GCPPointsContent() {
   } = useGCPMapState(images, setImages, activeImageId);
 
   const { currentStep, setCurrentStep, goToProcess, goToCustomCrop, goToAlign } = useWorkflowStepper();
+  const [customCropImageId, setCustomCropImageId] = useState<string | undefined>(undefined);
+
+  const handleCustomCrop = (imageId?: string) => {
+    setCustomCropImageId(imageId);
+    goToCustomCrop();
+  };
 
   useEffect(() => {
     if (currentStep === 'upload' && images.length > 0) {
       goToProcess();
     }
   }, [images.length, currentStep, goToProcess]);
+
+  useEffect(() => {
+    if (tiffDataUrl) {
+      setCurrentStep('download');
+    } else if (currentStep === 'download') {
+      setCurrentStep('upload');
+    }
+  }, [tiffDataUrl, currentStep, setCurrentStep]);
 
   const imageRef = useRef<HTMLImageElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -55,8 +74,8 @@ export function GCPPointsContent() {
       {promptMessage && (
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-3 bg-black/70 backdrop-blur-sm text-white rounded-full shadow-lg transition-all animate-in fade-in slide-in-from-top-4 duration-300">
           <span className="text-sm font-medium tracking-wide">{promptMessage}</span>
-          <button 
-            onClick={() => setPromptMessage(null)} 
+          <button
+            onClick={() => setPromptMessage(null)}
             className="text-white/70 hover:text-white transition-colors p-1 -mr-2"
             aria-label="Close prompt"
           >
@@ -82,7 +101,7 @@ export function GCPPointsContent() {
         <BatchProcessSection 
           images={images} 
           setImages={setImages} 
-          onCustomCrop={goToCustomCrop} 
+          onCustomCrop={handleCustomCrop} 
           onProceed={goToAlign} 
         />
       )}
@@ -93,19 +112,20 @@ export function GCPPointsContent() {
           setImages={setImages} 
           onBack={goToProcess} 
           onProceed={goToAlign} 
+          initialImageId={customCropImageId}
         />
       )}
 
       {currentStep === 'align' && images.length > 0 && (
         <>
-          <UploadedImagesSection 
-            images={images} 
-            activeImageId={activeImageId} 
+          <UploadedImagesSection
+            images={images}
+            activeImageId={activeImageId}
             setActiveImageId={setActiveImageId}
             activeImage={activeImage}
             setMode={setMode}
           />
-          <MapOverlayAlignment 
+          <MapOverlayAlignment
             images={images} gcps={gcps} activeImageId={activeImageId} activeImage={activeImage}
             setActiveImageId={setActiveImageId} isLocked={isLocked} opacity={opacity} setOpacity={setOpacity}
             mode={mode} setMode={setMode} handleSubmit={handleSubmit} mapContainerRef={mapContainerRef}
@@ -117,6 +137,17 @@ export function GCPPointsContent() {
             handleToggleVisibility={interactions.handleToggleVisibility}
           />
         </>
+      )}
+
+      {currentStep === 'download' && (
+        <GCPDownloadStep
+          tiffDataUrl={tiffDataUrl}
+          tiffFileName={tiffFileName}
+          images={images}
+          gcps={gcps}
+          onDownload={handleDownload}
+          onReset={handleReset}
+        />
       )}
     </div>
   );
