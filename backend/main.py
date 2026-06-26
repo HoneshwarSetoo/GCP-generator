@@ -39,7 +39,7 @@ app = FastAPI(title="GCP GeoTIFF Generator", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["*"],
 )
