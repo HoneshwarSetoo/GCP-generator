@@ -23,6 +23,10 @@ uvicorn main:app --reload --port 8000
 import io
 import json
 import logging
+import os
+import platform
+import socket
+import time
 import zipfile
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -34,13 +38,14 @@ from georeferencer import batch_georeference, georeference
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+STARTED_AT = time.time()
 
 app = FastAPI(title="GCP GeoTIFF Generator", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -55,6 +60,35 @@ def _parse_gcp_json(raw: str, label: str = "points") -> list:
     except (json.JSONDecodeError, ValueError) as exc:
         logger.error("Invalid GCP payload for '%s': %s", label, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/health")
+async def health_check() -> dict:
+    try:
+        from osgeo import gdal
+
+        gdal_version = gdal.VersionInfo("--version")
+    except Exception as exc:
+        gdal_version = f"unavailable: {exc}"
+
+    return {
+        "status": "ok",
+        "service": "GCP GeoTIFF Generator",
+        "version": app.version,
+        "uptime_seconds": round(time.time() - STARTED_AT),
+        "container": {
+            "hostname": socket.gethostname(),
+            "python": platform.python_version(),
+            "platform": platform.platform(),
+            "gdal": gdal_version,
+        },
+        "render": {
+            "service_name": os.getenv("RENDER_SERVICE_NAME"),
+            "service_id": os.getenv("RENDER_SERVICE_ID"),
+            "instance_id": os.getenv("RENDER_INSTANCE_ID"),
+            "git_commit": os.getenv("RENDER_GIT_COMMIT"),
+        },
+    }
 
 
 @app.post("/geotiff")

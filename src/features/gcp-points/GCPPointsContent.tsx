@@ -14,6 +14,7 @@ import { WorkflowStepper } from './components/WorkflowStepper';
 import { BatchProcessSection } from './components/BatchProcessSection';
 import { CustomCropSection } from './components/CustomCropSection';
 import { GCPDownloadStep } from './components/GCPDownloadStep';
+import { RenderHealthStatus } from './components/RenderHealthStatus';
 import { useWorkflowStepper } from './hooks/useWorkflowStepper';
 import { useEffect, useState } from 'react';
 
@@ -90,6 +91,8 @@ export function GCPPointsContent() {
           Upload images, drop them onto the map, lock them, and select points.
         </p>
       </div>
+
+      <RenderHealthStatus />
 
       <WorkflowStepper currentStep={currentStep} />
 

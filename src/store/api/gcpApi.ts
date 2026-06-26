@@ -1,5 +1,24 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
+export interface BackendHealth {
+  status: 'ok' | string;
+  service: string;
+  version: string;
+  uptime_seconds: number;
+  container: {
+    hostname: string;
+    python: string;
+    platform: string;
+    gdal: string;
+  };
+  render: {
+    service_name: string | null;
+    service_id: string | null;
+    instance_id: string | null;
+    git_commit: string | null;
+  };
+}
+
 export const gcpApi = createApi({
   reducerPath: 'gcpApi',
   baseQuery: fetchBaseQuery({
@@ -13,6 +32,9 @@ export const gcpApi = createApi({
         body: formData,
         responseHandler: (response) => response.arrayBuffer(),
       }),
+    }),
+    checkHealth: builder.query<BackendHealth, void>({
+      query: () => '/health',
     }),
     autoCropImage: builder.mutation<{ success: boolean; url: string }, { id: string, url: string }>({
       queryFn: async (arg) => {
@@ -44,6 +66,7 @@ export const gcpApi = createApi({
 
 export const {
   useCreateGCPPointsMutation,
+  useCheckHealthQuery,
   useAutoCropImageMutation,
   useSaveCustomCropMutation,
   useRemoveBackgroundMutation

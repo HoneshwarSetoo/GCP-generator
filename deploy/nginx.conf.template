@@ -10,6 +10,12 @@ http {
     proxy_send_timeout 300s;
     send_timeout 300s;
 
+    location = /healthz {
+      access_log off;
+      add_header Content-Type text/plain;
+      return 200 "ok\n";
+    }
+
     location /api/ {
       proxy_pass http://127.0.0.1:8000/;
       proxy_http_version 1.1;
