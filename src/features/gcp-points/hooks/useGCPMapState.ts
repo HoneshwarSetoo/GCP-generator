@@ -39,7 +39,7 @@ export function useGCPMapState(
     const overlays: google.maps.GroundOverlay[] = [];
 
     images.forEach(img => {
-      if (img.isLocked && img.bounds && img.url) {
+      if (img.isLocked && img.bounds && img.url && !img.isHidden) {
         const overlayOpacity = img.id === activeImageId ? opacity : 0.8;
         const overlay = new google.maps.GroundOverlay(img.url, img.bounds, { opacity: overlayOpacity, clickable: false });
         overlay.setMap(mapInstance);
