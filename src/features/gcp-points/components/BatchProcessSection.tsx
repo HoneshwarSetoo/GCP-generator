@@ -21,7 +21,7 @@ export function BatchProcessSection({ images, setImages, onCustomCrop, onProceed
         <CardTitle className="text-xl">Process Images</CardTitle>
         <div className="flex gap-3">
           <button
-            onClick={onCustomCrop}
+            onClick={() => onCustomCrop()}
             className="flex items-center gap-2 px-4 py-2 bg-white text-foreground hover:bg-gray-50 border border-border text-sm font-medium rounded-md transition-colors shadow-sm"
           >
             <Crop size={16} />
