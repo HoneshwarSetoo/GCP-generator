@@ -1,8 +1,9 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, Autocomplete, OverlayView, type GoogleMapProps } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete, OverlayView, Polygon, Polyline, type GoogleMapProps } from '@react-google-maps/api';
 import { GCP } from '../types';
 import { useGCPMap } from '../hooks/useGCPMap';
 import { GOOGLE_MAPS_CONFIG } from '@/lib/googleMapsConfig';
+import { toast } from 'sonner';
 
 const containerStyle = {
   width: '100%',
@@ -28,6 +29,7 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const markerRefs = useRef<{ [key: string]: google.maps.Marker }>({});
   const [center, setCenter] = useState({ lat: 18.52043, lng: 73.856744 });
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const onLoadMap = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -38,20 +40,56 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
     autocompleteRef.current = autocomplete;
   }, []);
 
-  const onPlaceChanged = useCallback(() => {
-    if (autocompleteRef.current !== null) {
-      const place = autocompleteRef.current.getPlace();
-      if (place.geometry && place.geometry.location) {
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
+  const searchLocation = useCallback((query: string) => {
+    if (!query || !query.trim()) return;
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address: query.trim() }, (results, status) => {
+      if (status === google.maps.GeocoderStatus.OK && results && results.length > 0 && results[0].geometry.location) {
+        const lat = results[0].geometry.location.lat();
+        const lng = results[0].geometry.location.lng();
         setCenter({ lat, lng });
         if (mapRef.current) {
           mapRef.current.panTo({ lat, lng });
           mapRef.current.setZoom(15);
         }
+      } else {
+        toast.error(`Location "${query}" not found on map.`);
+      }
+    });
+  }, []);
+
+  const onPlaceChanged = useCallback(() => {
+    if (autocompleteRef.current !== null) {
+      const place = autocompleteRef.current.getPlace();
+      if (!place || !place.geometry || !place.geometry.location) {
+        const query = inputRef.current?.value || place?.name;
+        if (query) {
+          searchLocation(query);
+        }
+        return;
+      }
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+      setCenter({ lat, lng });
+      if (mapRef.current) {
+        mapRef.current.panTo({ lat, lng });
+        mapRef.current.setZoom(15);
       }
     }
-  }, []);
+  }, [searchLocation]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const place = autocompleteRef.current?.getPlace();
+      if (place?.geometry?.location) {
+        return;
+      }
+      const query = inputRef.current?.value || '';
+      if (query.trim()) {
+        searchLocation(query);
+      }
+    }
+  }, [searchLocation]);
 
   const handleGoogleMapClick = useCallback((event: Parameters<NonNullable<GoogleMapProps['onClick']>>[0]) => {
     if (!event.latLng) {
@@ -109,14 +147,16 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[80%] max-w-sm z-10">
           <Autocomplete onLoad={onLoadAutocomplete} onPlaceChanged={onPlaceChanged}>
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search map..."
+              onKeyDown={handleKeyDown}
               className="w-full px-4 py-2 rounded-md shadow-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-white text-gray-800"
             />
           </Autocomplete>
         </div>
 
-        {gcps.map((gcp) => (
+        {gcps.filter(gcp => gcp.pointType !== 'auto').map((gcp) => (
           <Marker
             key={gcp.id}
             onLoad={(marker) => {
@@ -147,6 +187,38 @@ export function GCPMap({ gcps, onMapClick, onProjectionChange, onMapLoad, onMark
             }} */
           />
         ))}
+
+        {(() => {
+          const userPoints = gcps.filter(gcp => gcp.pointType !== 'auto');
+          if (userPoints.length > 2) {
+            const path = userPoints.map(gcp => ({ lat: gcp.geo_lat, lng: gcp.geo_lon }));
+            return (
+              <Polygon
+                path={path}
+                options={{
+                  fillColor: '#FF8A4C',
+                  fillOpacity: 0.35,
+                  strokeColor: '#FF8A4C',
+                  strokeOpacity: 0.8,
+                  strokeWeight: 2,
+                }}
+              />
+            );
+          } else if (userPoints.length === 2) {
+            const path = userPoints.map(gcp => ({ lat: gcp.geo_lat, lng: gcp.geo_lon }));
+            return (
+              <Polyline
+                path={path}
+                options={{
+                  strokeColor: '#FF8A4C',
+                  strokeOpacity: 0.8,
+                  strokeWeight: 2,
+                }}
+              />
+            );
+          }
+          return null;
+        })()}
 
         {children}
       </GoogleMap>

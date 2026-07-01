@@ -34,8 +34,8 @@ export function RenderHealthStatus() {
     isLoading,
     refetch,
   } = useCheckHealthQuery(undefined, {
-    pollingInterval: 30000,
-    refetchOnFocus: true,
+    // pollingInterval: 30000,
+    // refetchOnFocus: true,
     refetchOnReconnect: true,
   });
 

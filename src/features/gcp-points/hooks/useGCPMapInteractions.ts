@@ -166,10 +166,11 @@ export function useGCPMapInteractions({
               imageId: activeImage.id,
               label: `GCP-${points.length + 1}`,
               status: 'mapped',
+              pointType: 'auto',
               pxcel_x: Math.round(fractionX * imgElement.naturalWidth),
               pxcel_y: Math.round(fractionY * imgElement.naturalHeight),
-              geo_lat: ne.lat() - fractionY * (ne.lat() - sw.lat()),
-              geo_lon: sw.lng() + fractionX * (ne.lng() - sw.lng()),
+              geo_lat: Number((ne.lat() - fractionY * (ne.lat() - sw.lat())).toFixed(7)),
+              geo_lon: Number((sw.lng() + fractionX * (ne.lng() - sw.lng())).toFixed(7)),
             });
           }
         }
@@ -183,8 +184,8 @@ export function useGCPMapInteractions({
             const fractionY = gcp.pxcel_y / imgElement.naturalHeight;
             return {
               ...gcp,
-              geo_lat: ne.lat() - fractionY * (ne.lat() - sw.lat()),
-              geo_lon: sw.lng() + fractionX * (ne.lng() - sw.lng()),
+              geo_lat: Number((ne.lat() - fractionY * (ne.lat() - sw.lat())).toFixed(7)),
+              geo_lon: Number((sw.lng() + fractionX * (ne.lng() - sw.lng())).toFixed(7)),
             };
           }
           return gcp;

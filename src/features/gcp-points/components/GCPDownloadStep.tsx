@@ -12,18 +12,24 @@ import JSZip from 'jszip';
 interface GCPDownloadStepProps {
   tiffDataUrl: string | null;
   tiffFileName: string;
+  geojsonDataUrl: string | null;
+  geojsonFileName: string;
   images: UploadedImage[];
   gcps: GCP[];
   onDownload: () => void;
+  onDownloadGeojson: () => void;
   onReset: () => void;
 }
 
 export function GCPDownloadStep({
   tiffDataUrl,
   tiffFileName,
+  geojsonDataUrl,
+  geojsonFileName,
   images,
   gcps,
   onDownload,
+  onDownloadGeojson,
   onReset,
 }: GCPDownloadStepProps) {
   const [selectedImageId, setSelectedImageId] = useState<string>(images[0]?.id || '');
@@ -151,7 +157,7 @@ export function GCPDownloadStep({
                   onLoad={handleImageLoad}
                   className="max-w-full max-h-[45vh] object-contain rounded-md shadow-sm select-none"
                 />
-                {imageSize && selectedImageGcps.map((gcp, idx) => {
+                {imageSize && selectedImageGcps.filter(gcp => gcp.pointType !== 'auto').map((gcp, idx) => {
                   const left = (gcp.pxcel_x / imageSize.width) * 100;
                   const top = (gcp.pxcel_y / imageSize.height) * 100;
                   return (
@@ -159,7 +165,7 @@ export function GCPDownloadStep({
                       key={gcp.id || idx}
                       className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-primary border-2 border-white flex items-center justify-center text-[10px] font-bold text-white shadow-md transition-all scale-100 hover:scale-125"
                       style={{ left: `${left}%`, top: `${top}%` }}
-                      title={`${gcp.label} (Lat: ${gcp.geo_lat.toFixed(6)}, Lon: ${gcp.geo_lon.toFixed(6)})`}
+                      title={`${gcp.label} (Lat: ${gcp.geo_lat.toFixed(7)}, Lon: ${gcp.geo_lon.toFixed(7)})`}
                     >
                       {idx + 1}
                     </div>
@@ -301,6 +307,17 @@ export function GCPDownloadStep({
                 <Download className="h-4 w-4" />
                 Download {isZip ? 'ZIP Package' : 'GeoTIFF'}
               </Button>
+
+              {geojsonDataUrl && (
+                <Button
+                  onClick={onDownloadGeojson}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-primary text-primary hover:bg-primary/5 transition-colors py-2.5 rounded-lg"
+                >
+                  <Download className="h-4 w-4" />
+                  Download User Polygon GeoJSON
+                </Button>
+              )}
 
               <Button
                 variant="outline"

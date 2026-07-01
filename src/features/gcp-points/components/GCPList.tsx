@@ -27,8 +27,8 @@ export function GCPList({ gcps, onRemove }: GCPListProps) {
             <div className="text-xs text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1">
               <div><span className="font-medium text-gray-700">Image X:</span> {gcp.pxcel_x}</div>
               <div><span className="font-medium text-gray-700">Image Y:</span> {gcp.pxcel_y}</div>
-              <div><span className="font-medium text-gray-700">Lat:</span> {gcp.geo_lat.toFixed(6)}</div>
-              <div><span className="font-medium text-gray-700">Lng:</span> {gcp.geo_lon.toFixed(6)}</div>
+              <div><span className="font-medium text-gray-700">Lat:</span> {gcp.geo_lat.toFixed(7)}</div>
+              <div><span className="font-medium text-gray-700">Lng:</span> {gcp.geo_lon.toFixed(7)}</div>
               <div><span className="font-medium text-gray-700">Alt:</span> {gcp.altitude != null ? `${gcp.altitude.toFixed(2)} m` : 'N/A'}</div>
               <div><span className="font-medium text-gray-700">Residual:</span> {gcp.residual != null ? gcp.residual.toFixed(3) : 'N/A'}</div>
             </div>

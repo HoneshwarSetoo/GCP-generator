@@ -9,17 +9,27 @@ interface BatchProcessSectionProps {
   setImages: React.Dispatch<React.SetStateAction<UploadedImage[]>>;
   onCustomCrop: (imageId?: string) => void;
   onProceed: () => void;
+  onBack: () => void;
 }
 
-export function BatchProcessSection({ images, setImages, onCustomCrop, onProceed }: BatchProcessSectionProps) {
+export function BatchProcessSection({ images, setImages, onCustomCrop, onProceed, onBack }: BatchProcessSectionProps) {
   const { processImages, isProcessingAll, allProcessed } = useImageProcessing(images, setImages);
   const [previewImage, setPreviewImage] = React.useState<UploadedImage | null>(null);
 
   return (
     <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
-        <CardTitle className="text-xl">Process Images</CardTitle>
-        <div className="flex gap-3">
+      <CardHeader className="flex flex-col xl:flex-row items-start xl:items-center justify-between pb-4 border-b gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowRight size={16} className="rotate-180" />
+            Back
+          </button>
+          <CardTitle className="text-xl">Process Images</CardTitle>
+        </div>
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => onCustomCrop()}
             className="flex items-center gap-2 px-4 py-2 bg-white text-foreground hover:bg-gray-50 border border-border text-sm font-medium rounded-md transition-colors shadow-sm"
@@ -39,7 +49,7 @@ export function BatchProcessSection({ images, setImages, onCustomCrop, onProceed
             onClick={onProceed}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium rounded-md transition-colors shadow-sm"
           >
-            Proceed to Generate TIFF
+            Proceed to Generate TIFF and GeoJSON
             <ArrowRight size={16} />
           </button>
         </div>

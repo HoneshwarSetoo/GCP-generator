@@ -9,6 +9,7 @@ export interface GCP {
   altitude?: number | null;
   residual?: number;
   status?: 'mapped' | 'surveyed';
+  pointType?: 'auto' | 'user';
 }
 
 export interface GCPPayload {

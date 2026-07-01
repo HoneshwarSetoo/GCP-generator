@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/features/ui/card';
-import { Send, MapPin, Move, Loader2 } from 'lucide-react';
+import { Send, MapPin, Move, Loader2, ArrowLeft, X } from 'lucide-react';
 import { GCPMap } from './GCPMap';
 import { InteractiveImageOverlay } from './InteractiveImageOverlay';
 import { DraggableImageControls } from './DraggableImageControls';
@@ -191,7 +191,6 @@ function GmStylePortal({ children, mapContainerRef }: { children: React.ReactNod
         }
       };
     }
-
     return () => {
       if (overlayContainer && overlayContainer.parentNode) {
         overlayContainer.parentNode.removeChild(overlayContainer);
@@ -230,92 +229,143 @@ interface MapOverlayAlignmentProps {
   handleControlsPosChange: (id: string, pos: any) => void;
   handleUnlockSpecificImage: (img: UploadedImage) => void;
   handleToggleVisibility: (id: string) => void;
+  onBack?: () => void;
 }
 
 export function MapOverlayAlignment({
   images, gcps, activeImageId, activeImage, setActiveImageId, isLocked, opacity, setOpacity, mode, setMode,
   handleSubmit, isLoading, mapContainerRef, imageRef, projectionRef, mapInstance, setMapInstance, onMapClick, handleMarkerDragEnd,
-  localTransform, handleTransformChange, handleRemoveFromMap, handleToggleLock, handleControlsPosChange, handleUnlockSpecificImage, handleToggleVisibility
+  localTransform, handleTransformChange, handleRemoveFromMap, handleToggleLock, handleControlsPosChange, handleUnlockSpecificImage, handleToggleVisibility,
+  onBack
 }: MapOverlayAlignmentProps) {
   const imageUrl = activeImage?.processedUrl || activeImage?.url || null;
+  const userPointsCount = gcps.filter(g => g.pointType === 'user').length;
+  const isGenerateDisabled = isLoading || userPointsCount < 3;
+  const [isWarningDismissed, setIsWarningDismissed] = useState(false);
+
+  useEffect(() => {
+    if (isLocked) {
+      setIsWarningDismissed(false);
+    }
+  }, [isLocked, userPointsCount]);
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-4">
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-          <div>
-            <CardTitle>Map Overlay Alignment</CardTitle>
-            <CardDescription>
-              {isLocked 
-                ? 'Image is locked to the map. Zoom freely to plot accurate points.' 
-                : 'Drag an image here, align it, then click the lock button.'}
-            </CardDescription>
-          </div>
-
-          <button
-              onClick={handleSubmit}
-              disabled={gcps.length === 0 || isLoading}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#FF8A4C] text-white hover:bg-[#F27D3F] text-sm font-medium rounded-md shadow-sm transition-colors disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" /> Generating TIFF...
-                </>
-              ) : (
-                <>
-                  <Send size={16} /> Generate TIFF
-                </>
-              )}
-            </button>
-          
-          <div className="flex flex-wrap items-center gap-4 bg-muted/50 p-2 rounded-lg border border-border/50">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Opacity</span>
-              <input 
-                type="range" 
-                min="0" max="1" step="0.05" 
-                value={opacity} 
-                onChange={(e) => setOpacity(parseFloat(e.target.value))}
-                className="w-24 accent-primary"
-              />
-            </div>
-            
-            <div className="h-6 w-px bg-border mx-1"></div>
-            
-            <div className="flex bg-background rounded-md shadow-sm border border-border p-0.5">
-              <button
-                onClick={() => {
-                  if (mode !== 'align') {
-                    setMode('align');
-                    toast.info('Switched to Align mode');
-                  }
-                }}
-                disabled={isLocked || !activeImageId}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
-                  mode === 'align' && !isLocked ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground disabled:opacity-50'
-                }`}
-              >
-                <Move size={14} /> Align
-              </button>
-              <button
-                onClick={() => {
-                  if (mode !== 'point') {
-                    setMode('point');
-                    toast.info('Switched to Add Point mode');
-                  }
-                }}
-                disabled={!activeImageId}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-sm transition-colors ${
-                  mode === 'point' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground disabled:opacity-50'
-                }`}
-              >
-                <MapPin size={14} /> Add Point
-              </button>
-            </div>
-          </div>
-          
+    <>
+      {isLocked && userPointsCount < 3 && !isWarningDismissed && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 bg-destructive text-destructive-foreground rounded-lg shadow-lg border border-destructive/20 animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="text-sm font-medium">
+            ⚠️ Add at least 3 points around edge ({userPointsCount}/3)
+          </span>
+          <button 
+            type="button" 
+            onClick={() => setIsWarningDismissed(true)} 
+            className="p-1 hover:bg-destructive-foreground/10 rounded-full transition-colors"
+            aria-label="Close warning"
+          >
+            <X size={16} />
+          </button>
         </div>
-      </CardHeader>
+      )}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button
+                  onClick={onBack}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors self-start xl:self-center mt-1 xl:mt-0"
+                >
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+              )}
+              <div>
+                <CardTitle>Map Overlay Alignment</CardTitle>
+                <CardDescription>
+                  {isLocked 
+                    ? 'Image is locked to the map. Zoom freely to plot accurate points.' 
+                    : 'Drag an image here, align it, then click the lock button.'}
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-3 bg-muted/50 px-3 py-1 rounded-lg border border-border/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-muted-foreground">Opacity</span>
+                  <input 
+                    type="range" 
+                    min="0" max="1" step="0.05" 
+                    value={opacity} 
+                    onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                    className="w-20 accent-primary"
+                  />
+                </div>
+                
+                <div className="h-5 w-px bg-border mx-0.5"></div>
+                
+                <div className="flex bg-background rounded-md shadow-sm border border-border p-0.5">
+                  <button
+                    onClick={() => {
+                      if (mode !== 'align') {
+                        setMode('align');
+                        toast.info('Switched to Align mode');
+                      }
+                    }}
+                    disabled={isLocked || !activeImageId}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm transition-colors ${
+                      mode === 'align' && !isLocked ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground disabled:opacity-50'
+                    }`}
+                  >
+                    <Move size={13} /> Align
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (mode !== 'point') {
+                        setMode('point');
+                        toast.info('Switched to Add Point mode');
+                      }
+                    }}
+                    disabled={!activeImageId}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-sm transition-colors ${
+                      mode === 'point' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground disabled:opacity-50'
+                    }`}
+                  >
+                    <MapPin size={13} /> Add Point
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  if (userPointsCount < 3) {
+                    e.preventDefault();
+                    toast.error('Please select at least 3 points around the map image edge to generate TIFF and GeoJSON.');
+                    return;
+                  }
+                  handleSubmit();
+                }}
+                disabled={isLoading}
+                className={`flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium rounded-md shadow-sm transition-colors ${
+                  isGenerateDisabled
+                    ? 'opacity-50 cursor-not-allowed bg-gray-400 hover:bg-gray-400'
+                    : 'bg-[#FF8A4C] hover:bg-[#F27D3F]'
+                }`}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Generating TIFF and GeoJSON...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Generate TIFF and GeoJSON
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </CardHeader>
       <CardContent className="p-0 border-t">
         <div 
           ref={mapContainerRef} 
@@ -381,5 +431,6 @@ export function MapOverlayAlignment({
         </div>
       </CardContent>
     </Card>
+    </>
   );
 }

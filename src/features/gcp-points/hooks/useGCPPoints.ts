@@ -11,10 +11,12 @@ export function useGCPPoints() {
   const [promptMessage, setPromptMessage] = useState<string | null>(null);
   const [tiffDataUrl, setTiffDataUrl] = useState<string | null>(null);
   const [tiffFileName, setTiffFileName] = useState<string>('output.tif');
+  const [geojsonDataUrl, setGeojsonDataUrl] = useState<string | null>(null);
+  const [geojsonFileName, setGeojsonFileName] = useState<string>('selected_points.geojson');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [createGCPPoints, { isLoading: isCreatingGCPPoints }] = useCreateGCPPointsMutation();
 
-  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>, onSuccess?: () => void) => {
     const files = e.target.files;
     if (!files) return;
 
@@ -59,11 +61,13 @@ export function useGCPPoints() {
       } else {
         toast.error(`File ${file.name} is not a valid image or zip.`);
       }
+
     }
 
     if (newImages.length > 0) {
       setImages(prev => [...prev, ...newImages]);
       toast.success(`Successfully loaded ${newImages.length} images`);
+      onSuccess?.();
     }
 
     // Clear input value to allow uploading the same file again
@@ -78,10 +82,11 @@ export function useGCPPoints() {
       label: `GCP-${gcps.length + 1}`,
       pxcel_x: pixelX,
       pxcel_y: pixelY,
-      geo_lat: lat,
-      geo_lon: lng,
+      geo_lat: Number(lat.toFixed(7)),
+      geo_lon: Number(lng.toFixed(7)),
       altitude: altitude,
       status: 'mapped',
+      pointType: 'user',
     };
     setGcps((prev) => [...prev, newGcp]);
     toast.success('GCP point added');
@@ -91,6 +96,8 @@ export function useGCPPoints() {
     if (!activeImageId) return;
     const newGcps = points.map((p, i) => ({
       ...p,
+      geo_lat: Number(p.geo_lat.toFixed(7)),
+      geo_lon: Number(p.geo_lon.toFixed(7)),
       id: crypto.randomUUID(),
       imageId: activeImageId,
       label: `GCP-${i + 1}`,
@@ -130,8 +137,8 @@ export function useGCPPoints() {
           toast.success(`Position updated for ${gcp.label}`);
           return {
             ...gcp,
-            geo_lat: lat,
-            geo_lon: lng,
+            geo_lat: Number(lat.toFixed(7)),
+            geo_lon: Number(lng.toFixed(7)),
             ...(pxcel_x !== undefined ? { pxcel_x } : {}),
             ...(pxcel_y !== undefined ? { pxcel_y } : {}),
           };
@@ -146,10 +153,11 @@ export function useGCPPoints() {
    * - Single image  → POST /api/gcp-points        → returns GeoTIFF binary
    * - Multiple images → POST /api/gcp-points/batch → returns ZIP of GeoTIFFs
    */
-  const handleSubmit = useCallback(async () => {
-    if (gcps.length === 0) {
-      toast.error('No GCP points selected');
-      return;
+  const handleSubmit = useCallback(async (): Promise<boolean> => {
+    const userPoints = gcps.filter(g => g.pointType === 'user');
+    if (userPoints.length < 3) {
+      toast.error('Please select at least 3 points around the map image to generate TIFF and GeoJSON.');
+      return false;
     }
 
     const pointsByImage = gcps.reduce((acc, gcp) => {
@@ -177,14 +185,20 @@ export function useGCPPoints() {
         const blobResponse = await fetch(image.url);
         const imageBlob = await blobResponse.blob();
 
+        const trimmedGcps = imageGcps.map(g => ({
+          ...g,
+          geo_lat: Number(g.geo_lat.toFixed(7)),
+          geo_lon: Number(g.geo_lon.toFixed(7))
+        }));
+
         if (isBatch) {
           // Batch: append all images and their GCP arrays in parallel arrays
           formData.append('images', imageBlob, image.name);
-          formData.append('points', JSON.stringify(imageGcps));
+          formData.append('points', JSON.stringify(trimmedGcps));
         } else {
           // Single: use the simpler single-image field names
           formData.append('image', imageBlob, image.name);
-          formData.append('points', JSON.stringify(imageGcps));
+          formData.append('points', JSON.stringify(trimmedGcps));
         }
       }
 
@@ -202,15 +216,61 @@ export function useGCPPoints() {
         setTiffFileName(`${stem}_georef.tif`);
       }
 
+      // Generate GeoJSON from user selected points
+      const userPointsList = gcps.filter(gcp => gcp.pointType === 'user');
+      if (userPointsList.length >= 3) {
+        const polygonCoordinates = userPointsList.map(point => [Number(point.geo_lon.toFixed(7)), Number(point.geo_lat.toFixed(7))]);
+        // Close the polygon by adding the first point to the end
+        polygonCoordinates.push([...polygonCoordinates[0]]);
+
+        const geojson = {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: {
+                type: "Polygon",
+                coordinates: [polygonCoordinates],
+                crs: {
+                  properties: { name: "EPSG:4326" },
+                  type: "name"
+                }
+              },
+              properties: {
+                "felt:color": "#C93535",
+                "felt:fillOpacity": 0.25,
+                "felt:id": crypto.randomUUID(),
+                "felt:locked": false,
+                "felt:ordering": Date.now(),
+                "felt:showArea": false,
+                "felt:strokeOpacity": 1,
+                "felt:strokeStyle": "solid",
+                "felt:strokeWidth": 2,
+                "felt:type": "Polygon"
+              }
+            }
+          ]
+        };
+        const geojsonBlob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
+        setGeojsonDataUrl(URL.createObjectURL(geojsonBlob));
+        setGeojsonFileName('selected_points.geojson');
+      } else {
+        toast.error('Could not generate GeoJSON: At least 3 points are required.');
+        setGeojsonDataUrl(null);
+        return false;
+      }
+
       toast.success(
         isBatch
           ? `Batch complete — ${imageEntries.length} GeoTIFFs ready as ZIP`
           : 'GeoTIFF generated successfully'
       );
+      return true;
     } catch (error) {
       const message = getSubmitErrorMessage(error);
       console.error('Failed to generate GeoTIFF:', message);
       toast.error(`Failed to generate GeoTIFF: ${message}`);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -231,10 +291,21 @@ export function useGCPPoints() {
   /** Clears the result and resets the workspace for a new session. */
   const handleReset = useCallback(() => {
     setTiffDataUrl(null);
+    setGeojsonDataUrl(null);
     setGcps([]);
     setImages([]);
     setActiveImageId(null);
   }, []);
+
+  const handleDownloadGeojson = useCallback(() => {
+    if (!geojsonDataUrl) return;
+    const link = document.createElement('a');
+    link.href = geojsonDataUrl;
+    link.download = geojsonFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [geojsonDataUrl, geojsonFileName]);
 
   return {
     gcps,
@@ -254,8 +325,13 @@ export function useGCPPoints() {
     setMultiplePoints,
     updateGCPPosition,
     tiffDataUrl,
+    setTiffDataUrl,
     tiffFileName,
     handleDownload,
+    geojsonDataUrl,
+    setGeojsonDataUrl,
+    geojsonFileName,
+    handleDownloadGeojson,
     handleReset,
   };
 }
